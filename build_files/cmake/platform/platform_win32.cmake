@@ -239,9 +239,24 @@ if(NOT EXISTS "${LIBDIR}/")
   message(FATAL_ERROR "\n\nWindows requires pre-compiled libs at: '${LIBDIR}'. Please run `make update` in the blender source folder to obtain them.")
 endif()
 
+if(CMAKE_GENERATOR MATCHES "^Visual Studio.+" AND # Only supported in the VS IDE
+   MSVC_VERSION GREATER_EQUAL 1924            AND # Supported for 16.4+
+   WITH_CLANG_TIDY                                # And Clang Tidy needs to be on
+  )
+  set(CMAKE_VS_GLOBALS
+    "RunCodeAnalysis=false"
+    "EnableMicrosoftCodeAnalysis=false"
+    "EnableClangTidyCodeAnalysis=true"
+  )
+  set(VS_CLANG_TIDY On)
+endif()
+
 # Mark libdir as system headers with a lower warn level, to resolve some warnings
 # that we have very little control over
-if(MSVC_VERSION GREATER_EQUAL 1914 AND NOT MSVC_CLANG AND NOT WITH_WINDOWS_SCCACHE)
+if(MSVC_VERSION GREATER_EQUAL 1914 AND # Available with 15.7+
+   NOT MSVC_CLANG                  AND # But not for clang
+   NOT WITH_WINDOWS_SCCACHE        AND # And not when sccache is enabled
+   NOT VS_CLANG_TIDY)                  # Clang-tidy does not like these options
   add_compile_options(/experimental:external /external:templates- /external:I "${LIBDIR}" /external:W0)
 endif()
 
@@ -724,7 +739,7 @@ if(WINDOWS_PYTHON_DEBUG)
     string(REPLACE "/" "\\" _group_path "${_source_path}")
     source_group("${_group_path}" FILES "${_source}")
   endforeach()
-  
+
   # If the user scripts env var is set, include scripts from there otherwise
   # include user scripts in the profile folder.
   if(DEFINED ENV{BLENDER_USER_SCRIPTS})
@@ -735,7 +750,7 @@ if(WINDOWS_PYTHON_DEBUG)
     # Include the user scripts from the profile folder in the blender_python_user_scripts project.
     set(USER_SCRIPTS_ROOT "$ENV{appdata}/blender foundation/blender/${BLENDER_VERSION}/scripts")
   endif()
-  
+
   file(TO_CMAKE_PATH ${USER_SCRIPTS_ROOT} USER_SCRIPTS_ROOT)
   FILE(GLOB_RECURSE inFiles "${USER_SCRIPTS_ROOT}/*.*" )
   ADD_CUSTOM_TARGET(blender_python_user_scripts SOURCES ${inFiles})

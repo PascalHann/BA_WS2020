@@ -159,6 +159,7 @@ typedef enum eNodeSocketDatatype {
   SOCK_STRING = 7,
   SOCK_OBJECT = 8,
   SOCK_IMAGE = 9,
+  SOCK_GEOMETRY = 10,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -503,7 +504,7 @@ typedef struct bNodeTree {
 #define NTREE_SHADER 0
 #define NTREE_COMPOSIT 1
 #define NTREE_TEXTURE 2
-#define NTREE_SIMULATION 3
+#define NTREE_GEOMETRY 3
 
 /* ntree->init, flag */
 #define NTREE_TYPE_INIT 1
@@ -1058,6 +1059,16 @@ typedef struct NodeDenoise {
   char _pad[7];
 } NodeDenoise;
 
+typedef struct NodeAttributeMix {
+  /* e.g. MA_RAMP_BLEND. */
+  uint8_t blend_type;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_factor;
+  uint8_t input_type_a;
+  uint8_t input_type_b;
+} NodeAttributeMix;
+
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0
 #define NODE_SCRIPT_EXTERNAL 1
@@ -1436,17 +1447,39 @@ typedef enum NodeShaderOutputTarget {
   SHD_OUTPUT_CYCLES = 2,
 } NodeShaderOutputTarget;
 
-/* Particle Time Step Event node */
-typedef enum NodeSimParticleTimeStepEventType {
-  NODE_PARTICLE_TIME_STEP_EVENT_BEGIN = 0,
-  NODE_PARTICLE_TIME_STEP_EVENT_END = 1,
-} NodeSimParticleTimeStepEventType;
+/* Geometry Nodes */
 
-/* Simulation Time node */
-typedef enum NodeSimInputTimeType {
-  NODE_SIM_INPUT_SIMULATION_TIME = 0,
-  NODE_SIM_INPUT_SCENE_TIME = 1,
-} NodeSimInputTimeType;
+/* Boolean Node */
+typedef enum GeometryNodeBooleanOperation {
+  GEO_NODE_BOOLEAN_INTERSECT = 0,
+  GEO_NODE_BOOLEAN_UNION = 1,
+  GEO_NODE_BOOLEAN_DIFFERENCE = 2,
+} GeometryNodeBooleanOperation;
+
+/* Triangulate Node */
+typedef enum GeometryNodeTriangulateNGons {
+  GEO_NODE_TRIANGULATE_NGON_BEAUTY = 0,
+  GEO_NODE_TRIANGULATE_NGON_EARCLIP = 1,
+} GeometryNodeTriangulateNGons;
+
+typedef enum GeometryNodeTriangulateQuads {
+  GEO_NODE_TRIANGULATE_QUAD_BEAUTY = 0,
+  GEO_NODE_TRIANGULATE_QUAD_FIXED = 1,
+  GEO_NODE_TRIANGULATE_QUAD_ALTERNATE = 2,
+  GEO_NODE_TRIANGULATE_QUAD_SHORTEDGE = 3,
+} GeometryNodeTriangulateQuads;
+
+typedef enum GeometryNodeUseAttributeFlag {
+  GEO_NODE_USE_ATTRIBUTE_A = (1 << 0),
+  GEO_NODE_USE_ATTRIBUTE_B = (1 << 1),
+} GeometryNodeUseAttributeFlag;
+
+typedef enum GeometryNodeAttributeInputMode {
+  GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE = 0,
+  GEO_NODE_ATTRIBUTE_INPUT_FLOAT = 1,
+  GEO_NODE_ATTRIBUTE_INPUT_VECTOR = 2,
+  GEO_NODE_ATTRIBUTE_INPUT_COLOR = 3,
+} GeometryNodeAttributeInputMode;
 
 #ifdef __cplusplus
 }
