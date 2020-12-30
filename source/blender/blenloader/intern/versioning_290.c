@@ -66,6 +66,8 @@
 
 #include "RNA_access.h"
 
+#include "SEQ_proxy.h"
+#include "SEQ_render.h"
 #include "SEQ_sequencer.h"
 
 #include "BLO_readfile.h"
@@ -111,7 +113,9 @@ static void seq_convert_transform_animation(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] = image_size / 2 + bezt->vec[0][1] - scene->r.xsch / 2;
       bezt->vec[1][1] = image_size / 2 + bezt->vec[1][1] - scene->r.xsch / 2;
+      bezt->vec[2][1] = image_size / 2 + bezt->vec[2][1] - scene->r.xsch / 2;
     }
   }
 }
@@ -248,7 +252,9 @@ static void seq_convert_transform_animation_2(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] *= scale_to_fit_factor;
       bezt->vec[1][1] *= scale_to_fit_factor;
+      bezt->vec[2][1] *= scale_to_fit_factor;
     }
   }
 }
@@ -284,6 +290,12 @@ static void seq_convert_transform_crop_2(const Scene *scene,
 
   char name_esc[(sizeof(seq->name) - 2) * 2], *path;
   BLI_str_escape(name_esc, seq->name + 2, sizeof(name_esc));
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.scale_x", name_esc);
+  seq_convert_transform_animation_2(scene, path, scale_to_fit_factor);
+  MEM_freeN(path);
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.scale_y", name_esc);
+  seq_convert_transform_animation_2(scene, path, scale_to_fit_factor);
+  MEM_freeN(path);
   path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.min_x", name_esc);
   seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
   MEM_freeN(path);
@@ -686,6 +698,7 @@ static void do_versions_291_fcurve_handles_limit(FCurve *fcu)
   }
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   UNUSED_VARS(fd);
@@ -1413,6 +1426,55 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
       if (scene->ed != NULL) {
         scene->toolsettings->sequencer_tool_settings = SEQ_tool_settings_init();
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 9)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == GEO_NODE_ATTRIBUTE_MATH && node->storage == NULL) {
+            const int old_use_attibute_a = (1 << 0);
+            const int old_use_attibute_b = (1 << 1);
+            NodeAttributeMath *data = MEM_callocN(sizeof(NodeAttributeMath), "NodeAttributeMath");
+            data->operation = NODE_MATH_ADD;
+            data->input_type_a = (node->custom2 & old_use_attibute_a) ?
+                                     GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE :
+                                     GEO_NODE_ATTRIBUTE_INPUT_FLOAT;
+            data->input_type_b = (node->custom2 & old_use_attibute_b) ?
+                                     GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE :
+                                     GEO_NODE_ATTRIBUTE_INPUT_FLOAT;
+            node->storage = data;
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    /* Default properties editors to auto outliner sync. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          if (space->spacetype == SPACE_PROPERTIES) {
+            SpaceProperties *space_properties = (SpaceProperties *)space;
+            space_properties->outliner_sync = PROPERTIES_SYNC_AUTO;
+          }
+        }
+      }
+    }
+
+    /* Ensure that new viscosity strength field is initialized correctly. */
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "viscosity_value")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain != NULL) {
+              fmd->domain->viscosity_value = 0.05;
+            }
+          }
+        }
       }
     }
   }

@@ -854,7 +854,7 @@ static void edit_node_properties_get(
 /* is rct in visible part of node? */
 static bNode *visible_node(SpaceNode *snode, const rctf *rct)
 {
-  LISTBASE_FOREACH (bNode *, node, &snode->edittree->nodes) {
+  LISTBASE_FOREACH_BACKWARD (bNode *, node, &snode->edittree->nodes) {
     if (BLI_rctf_isect(&node->totr, rct, NULL)) {
       return node;
     }
@@ -1859,7 +1859,7 @@ void NODE_OT_output_file_add_socket(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   RNA_def_string(
-      ot->srna, "file_path", "Image", MAX_NAME, "File Path", "Sub-path of the output file");
+      ot->srna, "file_path", "Image", MAX_NAME, "File Path", "Subpath of the output file");
 }
 
 /* ****************** Multi File Output Remove Socket  ******************* */
