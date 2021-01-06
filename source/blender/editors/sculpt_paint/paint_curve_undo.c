@@ -148,7 +148,6 @@ static void paintcurve_undosys_foreach_ID_ref(UndoStep *us_p,
 void ED_paintcurve_undosys_type(UndoType *ut)
 {
   ut->name = "Paint Curve";
-  /* don't poll for now */
   ut->poll = paintcurve_undosys_poll;
   ut->step_encode_init = paintcurve_undosys_step_encode_init;
   ut->step_encode = paintcurve_undosys_step_encode;
@@ -157,7 +156,7 @@ void ED_paintcurve_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = paintcurve_undosys_foreach_ID_ref;
 
-  ut->use_context = false;
+  ut->use_context_for_encode = false;
 
   ut->step_size = sizeof(PaintCurveUndoStep);
 }
