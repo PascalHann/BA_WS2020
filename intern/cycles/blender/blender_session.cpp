@@ -820,6 +820,11 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   /* data and camera synchronize */
   b_depsgraph = b_depsgraph_;
 
+  /* Update old bounds before overwriting new bounds */
+  for (Object *object : scene->objects) {
+    object->old_bounds = object->bounds;
+  }
+
   BL::Object b_camera_override(b_engine.camera_override());
   sync->sync_data(
       b_render, b_depsgraph, b_v3d, b_camera_override, width, height, &python_thread_state);
