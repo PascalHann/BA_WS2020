@@ -110,7 +110,11 @@ bool Mesh::Triangle::valid(const float3 *verts) const
   return isfinite3_safe(verts[v[0]]) && isfinite3_safe(verts[v[1]]) && isfinite3_safe(verts[v[2]]);
 }
 
-/* SubdFace */
+//vector<float3> Mesh::get_verts() const
+//{
+//  return verts;
+//}
+    /* SubdFace */
 
 float3 Mesh::SubdFace::normal(const Mesh *mesh) const
 {

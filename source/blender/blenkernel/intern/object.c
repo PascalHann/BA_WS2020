@@ -171,6 +171,7 @@ static ThreadMutex vparent_lock = BLI_MUTEX_INITIALIZER;
 
 static void copy_object_pose(Object *obn, const Object *ob, const int flag);
 
+/*called when a new mesh is created?*/
 static void object_init_data(ID *id)
 {
   Object *ob = (Object *)id;

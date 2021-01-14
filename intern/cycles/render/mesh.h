@@ -81,6 +81,7 @@ class Mesh : public Geometry {
     float3 compute_normal(const float3 *verts) const;
 
     bool valid(const float3 *verts) const;
+
   };
 
   Triangle get_triangle(size_t i) const
@@ -88,6 +89,8 @@ class Mesh : public Geometry {
     Triangle tri = {{triangles[i * 3 + 0], triangles[i * 3 + 1], triangles[i * 3 + 2]}};
     return tri;
   }
+
+ //vector<float3> get_verts() const;
 
   size_t num_triangles() const
   {
