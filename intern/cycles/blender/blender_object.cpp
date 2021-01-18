@@ -113,7 +113,6 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   BL::Object b_ob_instance = is_instance ? b_instance.instance_object() : b_ob;
   const bool motion = motion_time != 0.0f;
   /*const*/ Transform tfm = get_transform(b_ob.matrix_world());
-   b_ob.location();
   int *persistent_id = NULL;
   BL::Array<int, OBJECT_PERSISTENT_ID_SIZE> persistent_id_array;
   if (is_instance) {
@@ -235,7 +234,6 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                                      use_particle_hair,
                                      object_geom_task_pool);
   object->set_geometry(geometry);
-
 
   /* special case not tracked by object update flags */
 

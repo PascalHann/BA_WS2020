@@ -496,13 +496,11 @@ static void blender_camera_sync(Camera *cam,
   cam->set_shutter_curve(bcam->shutter_curve);
 
   /* border */
-  //for render region:
-  //cam->set_border_left(bcam->border.left);
-  //cam->set_border_right(bcam->border.right);
-  //cam->set_border_top(bcam->border.top);
-  //cam->set_border_bottom(bcam->border.bottom);
+  cam->set_border_left(bcam->border.left);
+  cam->set_border_right(bcam->border.right);
+  cam->set_border_top(bcam->border.top);
+  cam->set_border_bottom(bcam->border.bottom);
 
-  //camera border when in camera view:
   cam->set_viewport_camera_border_left(bcam->viewport_camera_border.left);
   cam->set_viewport_camera_border_right(bcam->viewport_camera_border.right);
   cam->set_viewport_camera_border_top(bcam->viewport_camera_border.top);
@@ -809,16 +807,11 @@ static void blender_camera_border(BlenderCamera *bcam,
      * and if so use border from 3d viewport
      * assume viewport has got correctly clamped border already
      */
-    if (b_v3d.use_render_border()) { 
+    if (b_v3d.use_render_border()) {
       bcam->border.left = b_v3d.render_border_min_x();
       bcam->border.right = b_v3d.render_border_max_x();
       bcam->border.bottom = b_v3d.render_border_min_y();
       bcam->border.top = b_v3d.render_border_max_y();
-      bcam->border.left = 0.5;
-      bcam->border.right = 0.5;
-      bcam->border.bottom = 0;
-      bcam->border.top = 0.5;
-      
     }
     return;
   }
@@ -910,8 +903,6 @@ BufferParams BlenderSync::get_buffer_params(BL::RenderSettings &b_render,
     use_border = b_v3d.use_render_border();
   else
     use_border = b_render.use_border();
-
-  use_border = true; //!!!! temporarily forcing this to test something TAKE OUT LATER!!!
 
   if (use_border) {
     /* border render */

@@ -197,12 +197,10 @@ void TileManager::set_samples(int num_samples_)
  * this image. */
 int TileManager::gen_tiles(bool sliced)
 {
- 
   int resolution = state.resolution_divider;
   int image_w = max(1, params.width / resolution);
   int image_h = max(1, params.height / resolution);
   int2 center = make_int2(image_w / 2, image_h / 2);
-
 
   int num = preserve_tile_device || sliced ? min(image_h, num_devices) : 1;
   int slice_num = sliced ? num : 1;

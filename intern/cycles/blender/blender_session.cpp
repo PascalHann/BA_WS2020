@@ -943,51 +943,6 @@ bool BlenderSession::draw(int w, int h)
         &BL::RenderEngine::unbind_display_space_shader, &b_engine);
   }
 
-    
-    Mesh *mesh;
-    vector<float3> bb_corners;
-    if (scene->objects.size() > 0) {
-
-      mesh = (Mesh *)scene->objects[0]->get_geometry();
-      mesh->compute_bounds();
-      BoundBox bb = mesh->bounds;
-      bb_corners = vector<float3>({{bb.min.x, bb.min.y, bb.min.z},
-                                   {bb.min.x, bb.max.y, bb.min.z},
-                                   {bb.min.x, bb.min.y, bb.max.z},
-                                   {bb.min.x, bb.max.y, bb.max.z},
-                                   {bb.max.x, bb.min.y, bb.min.z},
-                                   {bb.max.x, bb.max.y, bb.min.z},
-                                   {bb.max.x, bb.min.y, bb.max.z},
-                                   {bb.max.x, bb.max.y, bb.max.z}});
-
-      for (int a = 0; a < bb_corners.size(); a++) {
-        bb_corners[a] = transform_point(&(projection_to_transform(scene->camera->worldtoraster)), bb_corners[a]);
-        //bb_corners[a] = transform_perspective(&(scene->camera->worldtoraster), bb_corners[a]);
-      }
-
-      float3 max = {-INFINITY, -INFINITY, -INFINITY};
-      float3 min = {INFINITY, INFINITY, INFINITY};
-
-      for (int a = 0; a < bb_corners.size(); a++) {
-        min.x = std::min(min.x, bb_corners[a].x);
-        min.y = std::min(min.y, bb_corners[a].y);
-        min.z = std::min(min.z, bb_corners[a].z);
-
-        max.x = std::max(max.x, bb_corners[a].x);
-        max.y = std::max(max.y, bb_corners[a].y);
-        max.z = std::max(max.z, bb_corners[a].z);
-      }
-      //std::cout << "";
-     // scene->camera->set_border_right(max.x/w);
-  //    scene->camera->set_border_left(min.x/width);
-      //scene->camera->set_border_top(max.y/height);
-      //scene->camera->set_border_bottom(min.y/height);
-    }
-      
-
-
-
-
   return !session->draw(buffer_params, draw_params);
 }
 

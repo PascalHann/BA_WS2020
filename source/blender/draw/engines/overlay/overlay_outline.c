@@ -296,7 +296,7 @@ void OVERLAY_outline_cache_populate(OVERLAY_Data *vedata,
 
   /* Early exit: outlines of bounding boxes are not drawn. */
   if (!draw_outline) {
-     return;
+    return;
   }
 
   if (ob->type == OB_GPENCIL) {
