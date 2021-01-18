@@ -81,6 +81,8 @@ class Object : public Node {
   void compute_bounds(bool motion_blur);
   void apply_transform(bool apply_to_motion);
 
+  BoundBox2D compute_raster_bounds(BoundBox bbox, ProjectionTransform worldtoraster);
+
   /* Convert between normalized -1..1 motion time and index
    * in the motion array. */
   bool use_motion() const;

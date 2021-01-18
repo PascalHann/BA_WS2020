@@ -151,6 +151,44 @@ void Object::update_motion()
   }
 }
 
+/* Compute 2D raster space bounding box from 3D world space Bounding Box */
+BoundBox2D Object::compute_raster_bounds(BoundBox bbox, ProjectionTransform worldtoraster)
+{
+  BoundBox2D result = BoundBox2D();
+  vector<float3> bb_corners = vector<float3>({{bbox.min.x, bbox.min.y, bbox.min.z},
+                                              {bbox.min.x, bbox.max.y, bbox.min.z},
+                                              {bbox.min.x, bbox.min.y, bbox.max.z},
+                                              {bbox.min.x, bbox.max.y, bbox.max.z},
+                                              {bbox.max.x, bbox.min.y, bbox.min.z},
+                                              {bbox.max.x, bbox.max.y, bbox.min.z},
+                                              {bbox.max.x, bbox.min.y, bbox.max.z},
+                                              {bbox.max.x, bbox.max.y, bbox.max.z}});
+
+  for (int a = 0; a < bb_corners.size(); a++) {
+    bb_corners[a] = transform_perspective(&(worldtoraster), bb_corners[a]);
+  }
+
+  float3 max = {-INFINITY, -INFINITY, -INFINITY};
+  float3 min = {INFINITY, INFINITY, INFINITY};
+
+  for (int a = 0; a < bb_corners.size(); a++) {
+    min.x = std::min(min.x, bb_corners[a].x);
+    min.y = std::min(min.y, bb_corners[a].y);
+    min.z = std::min(min.z, bb_corners[a].z);
+
+    max.x = std::max(max.x, bb_corners[a].x);
+    max.y = std::max(max.y, bb_corners[a].y);
+    max.z = std::max(max.z, bb_corners[a].z);
+  }
+
+  result.left = min.x;
+  result.right = max.x;
+  result.top = min.y;
+  result.bottom = max.y;
+
+  return result;
+}
+
 void Object::compute_bounds(bool motion_blur)
 {
   BoundBox mbounds = geometry->bounds;
