@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <resources targetOsVersion="10.0.0" majorVersion="1">
 	<packaging>
-        <autoResourcePackage qualifier="Language"/>	
+		<autoResourcePackage qualifier="Language"/>
 		<autoResourcePackage qualifier="Scale"/>
 	</packaging>
 	<index root="\" startIndexAt="\">

@@ -40,11 +40,14 @@ void register_node_type_geo_attribute_randomize(void);
 void register_node_type_geo_attribute_math(void);
 void register_node_type_geo_join_geometry(void);
 void register_node_type_geo_point_separate(void);
+void register_node_type_geo_point_scale(void);
+void register_node_type_geo_point_translate(void);
 void register_node_type_geo_attribute_compare(void);
 void register_node_type_geo_attribute_mix(void);
 void register_node_type_geo_attribute_color_ramp(void);
-void register_node_type_geo_rotate_points(void);
+void register_node_type_geo_point_rotate(void);
 void register_node_type_geo_align_rotation_to_vector(void);
+void register_node_type_geo_sample_texture(void);
 
 #ifdef __cplusplus
 }
