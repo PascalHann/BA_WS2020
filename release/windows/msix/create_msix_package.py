@@ -110,7 +110,7 @@ else:
     pfx_path = None
     print("Creating MSIX package without signing.")
 
-pri_new_command = ["makepri",
+pri_command = ["makepri",
                    "new",
                    "/pr", f"{content_folder.absolute()}",
                    "/cf", f"{pri_config_file.absolute()}",
@@ -175,8 +175,8 @@ with zipfile.ZipFile(local_blender_zip, "r") as blender_zip:
 print("... extraction complete.")
 
 
-print(f"Generating Package Resource Index (PRI) file using command: {' '.join(pri_new_command)}")
-execute_command(pri_new_command, "MakePri", 4)
+print(f"Generating Package Resource Index (PRI) file using command: {' '.join(pri_command)}")
+execute_command(pri_command, "MakePri", 4)
 
 print(f"Creating MSIX package using command: {' '.join(msix_command)}")
 
