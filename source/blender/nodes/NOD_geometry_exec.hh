@@ -20,6 +20,7 @@
 
 #include "BKE_attribute_access.hh"
 #include "BKE_geometry_set.hh"
+#include "BKE_geometry_set_instances.hh"
 #include "BKE_persistent_data_handle.hh"
 
 #include "DNA_node_types.h"
@@ -38,6 +39,7 @@ using bke::Float3ReadAttribute;
 using bke::Float3WriteAttribute;
 using bke::FloatReadAttribute;
 using bke::FloatWriteAttribute;
+using bke::geometry_set_realize_instances;
 using bke::Int32ReadAttribute;
 using bke::Int32WriteAttribute;
 using bke::PersistentDataHandleMap;
@@ -101,6 +103,25 @@ class GeoNodeExecParams {
     this->check_extract_input(identifier, &CPPType::get<T>());
 #endif
     return input_values_.extract<T>(identifier);
+  }
+
+  /**
+   * Get input as vector for multi input socket with the given identifier.
+   *
+   * This method can only be called once for each identifier.
+   */
+  template<typename T> Vector<T> extract_multi_input(StringRef identifier)
+  {
+    Vector<T> values;
+    values.append(input_values_.extract<T>(identifier));
+    int i = 1;
+    std::string sub_identifier = identifier + "[1]";
+    while (input_values_.contains(sub_identifier)) {
+      values.append(input_values_.extract<T>(sub_identifier));
+      i++;
+      sub_identifier = identifier + "[" + std::to_string(i) + "]";
+    }
+    return values;
   }
 
   /**
@@ -202,6 +223,10 @@ class GeoNodeExecParams {
   CustomDataType get_input_attribute_data_type(const StringRef name,
                                                const GeometryComponent &component,
                                                const CustomDataType default_type) const;
+
+  AttributeDomain get_highest_priority_input_domain(Span<std::string> names,
+                                                    const GeometryComponent &component,
+                                                    const AttributeDomain default_domain) const;
 
  private:
   /* Utilities for detecting common errors at when using this class. */
