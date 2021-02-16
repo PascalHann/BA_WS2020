@@ -1275,8 +1275,8 @@ void GeometryManager::device_update_bvh(Device *device,
       dscene->prim_tri_verts.give_data(pack.prim_tri_verts);
     }
     else {
-      /* it is not stricly necessary to skip those resizes we if do not have to repack, as the OS
-       * will not allocate pages if we do not touch them, however it does help catching bugs */
+      /* It is not strictly necessary to skip those resizes we if do not have to repack, as the OS
+       * will not allocate pages if we do not touch them, however it does help catching bugs. */
       pack.prim_tri_index.resize(num_prims);
       pack.prim_tri_verts.resize(num_tri_verts);
       pack.prim_type.resize(num_prims);
@@ -1388,8 +1388,8 @@ enum {
 
   ATTRS_NEED_REALLOC = (ATTR_FLOAT_NEEDS_REALLOC | ATTR_FLOAT2_NEEDS_REALLOC |
                         ATTR_FLOAT3_NEEDS_REALLOC | ATTR_UCHAR4_NEEDS_REALLOC),
-  DEVICE_MESH_DATA_NEEDS_REALLOC = (CURVE_DATA_NEED_REALLOC | ATTRS_NEED_REALLOC),
-  DEVICE_CURVE_DATA_NEEDS_REALLOC = (MESH_DATA_NEED_REALLOC | ATTRS_NEED_REALLOC),
+  DEVICE_MESH_DATA_NEEDS_REALLOC = (MESH_DATA_NEED_REALLOC | ATTRS_NEED_REALLOC),
+  DEVICE_CURVE_DATA_NEEDS_REALLOC = (CURVE_DATA_NEED_REALLOC | ATTRS_NEED_REALLOC),
 };
 
 static void update_device_flags_attribute(uint32_t &device_update_flags,
@@ -1453,7 +1453,7 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       if (shader->need_update_uvs) {
         device_update_flags |= ATTR_FLOAT2_NEEDS_REALLOC;
 
-        /* Attributes might need to be tesselated if added. */
+        /* Attributes might need to be tessellated if added. */
         if (geom->is_mesh()) {
           Mesh *mesh = static_cast<Mesh *>(geom);
           if (mesh->need_tesselation()) {
@@ -1465,7 +1465,7 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       if (shader->need_update_attribute) {
         device_update_flags |= ATTRS_NEED_REALLOC;
 
-        /* Attributes might need to be tesselated if added. */
+        /* Attributes might need to be tessellated if added. */
         if (geom->is_mesh()) {
           Mesh *mesh = static_cast<Mesh *>(geom);
           if (mesh->need_tesselation()) {
@@ -1532,7 +1532,7 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
       if (mesh->need_update_rebuild) {
         device_update_flags |= DEVICE_MESH_DATA_NEEDS_REALLOC;
       }
-      else if (mesh->verts_is_modified()) {
+      else if (mesh->is_modified()) {
         device_update_flags |= DEVICE_MESH_DATA_MODIFIED;
       }
     }
@@ -1591,16 +1591,16 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
     dscene->attributes_map.tag_realloc();
     dscene->attributes_float2.tag_realloc();
   }
-  else if (device_update_flags & ATTR_FLOAT_MODIFIED) {
-    dscene->attributes_float.tag_modified();
+  else if (device_update_flags & ATTR_FLOAT2_MODIFIED) {
+    dscene->attributes_float2.tag_modified();
   }
 
   if (device_update_flags & ATTR_FLOAT3_NEEDS_REALLOC) {
     dscene->attributes_map.tag_realloc();
     dscene->attributes_float3.tag_realloc();
   }
-  else if (device_update_flags & ATTR_FLOAT_MODIFIED) {
-    dscene->attributes_float.tag_modified();
+  else if (device_update_flags & ATTR_FLOAT3_MODIFIED) {
+    dscene->attributes_float3.tag_modified();
   }
 
   if (device_update_flags & ATTR_UCHAR4_NEEDS_REALLOC) {
@@ -1612,9 +1612,10 @@ void GeometryManager::device_update_preprocess(Device *device, Scene *scene, Pro
   }
 
   if (device_update_flags & DEVICE_MESH_DATA_MODIFIED) {
-    /* if anything else than vertices are modified, we would need to reallocate, so this is the
-     * only array that can be updated */
+    /* if anything else than vertices or shaders are modified, we would need to reallocate, so
+     * these are the only arrays that can be updated */
     dscene->tri_vnormal.tag_modified();
+    dscene->tri_shader.tag_modified();
   }
 
   if (device_update_flags & DEVICE_CURVE_DATA_MODIFIED) {

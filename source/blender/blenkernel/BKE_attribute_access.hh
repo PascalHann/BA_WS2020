@@ -33,6 +33,8 @@ using fn::CPPType;
 
 const CPPType *custom_data_type_to_cpp_type(const CustomDataType type);
 CustomDataType cpp_type_to_custom_data_type(const CPPType &type);
+CustomDataType attribute_data_type_highest_complexity(Span<CustomDataType> data_types);
+AttributeDomain attribute_domain_highest_priority(Span<AttributeDomain> domains);
 
 /**
  * This class offers an indirection for reading an attribute.
@@ -128,7 +130,7 @@ class WriteAttribute {
   void *array_buffer_ = nullptr;
   /* True, when the buffer points to a temporary array. */
   bool array_is_temporary_ = false;
-  /* This helps to protect agains forgetting to apply changes done to the array. */
+  /* This helps to protect against forgetting to apply changes done to the array. */
   bool array_should_be_applied_ = false;
 
  public:

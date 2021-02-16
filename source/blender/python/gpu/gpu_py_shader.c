@@ -169,12 +169,12 @@ static PyObject *py_shader_uniform_block_from_name(BPyGPUShader *self, PyObject 
   return PyLong_FromLong(uniform);
 }
 
-static bool py_shader_uniform_vector_imp(PyObject *args,
-                                         int elem_size,
-                                         int *r_location,
-                                         int *r_length,
-                                         int *r_count,
-                                         Py_buffer *r_pybuffer)
+static bool py_shader_uniform_vector_impl(PyObject *args,
+                                          int elem_size,
+                                          int *r_location,
+                                          int *r_length,
+                                          int *r_count,
+                                          Py_buffer *r_pybuffer)
 {
   PyObject *buffer;
 
@@ -223,7 +223,7 @@ static PyObject *py_shader_uniform_vector_float(BPyGPUShader *self, PyObject *ar
 
   Py_buffer pybuffer;
 
-  if (!py_shader_uniform_vector_imp(args, sizeof(float), &location, &length, &count, &pybuffer)) {
+  if (!py_shader_uniform_vector_impl(args, sizeof(float), &location, &length, &count, &pybuffer)) {
     return NULL;
   }
 
@@ -244,7 +244,7 @@ static PyObject *py_shader_uniform_vector_int(BPyGPUShader *self, PyObject *args
 
   Py_buffer pybuffer;
 
-  if (!py_shader_uniform_vector_imp(args, sizeof(int), &location, &length, &count, &pybuffer)) {
+  if (!py_shader_uniform_vector_impl(args, sizeof(int), &location, &length, &count, &pybuffer)) {
     return NULL;
   }
 
@@ -570,9 +570,6 @@ PyDoc_STRVAR(
     "   ``GL_ARB_texture_gather``, ``GL_ARB_texture_cube_map_array``\n"
     "   and ``GL_ARB_shader_draw_parameters``.\n"
     "\n"
-    "   To debug shaders, use the ``--debug-gpu-shaders`` command line option\n"
-    "   to see full GLSL shader compilation and linking errors.\n"
-    "\n"
     "   For drawing user interface elements and gizmos, use\n"
     "   ``fragOutput = blender_srgb_to_framebuffer_space(fragOutput)``\n"
     "   to transform the output sRGB colors to the frame-buffer color-space.\n"
@@ -739,7 +736,7 @@ PyDoc_STRVAR(py_shader_module_doc,
              "3D_SMOOTH_COLOR\n"
              "   :Attributes: vec3 pos, vec4 color\n"
              "   :Uniforms: none\n");
-static PyModuleDef BPyGPU_shader_module_def = {
+static PyModuleDef py_shader_module_def = {
     PyModuleDef_HEAD_INIT,
     .m_name = "gpu.shader",
     .m_doc = py_shader_module_doc,
@@ -763,11 +760,11 @@ PyObject *BPyGPUShader_CreatePyObject(GPUShader *shader, bool is_builtin)
   return (PyObject *)self;
 }
 
-PyObject *BPyInit_gpu_shader(void)
+PyObject *bpygpu_shader_init(void)
 {
   PyObject *submodule;
 
-  submodule = PyModule_Create(&BPyGPU_shader_module_def);
+  submodule = PyModule_Create(&py_shader_module_def);
 
   return submodule;
 }

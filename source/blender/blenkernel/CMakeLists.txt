@@ -78,9 +78,10 @@ set(SRC
   intern/armature.c
   intern/armature_deform.c
   intern/armature_update.c
-  intern/asset.c
+  intern/asset.cc
   intern/attribute.c
   intern/attribute_access.cc
+  intern/attribute_math.cc
   intern/autoexec.c
   intern/blender.c
   intern/blender_copybuffer.c
@@ -129,6 +130,7 @@ set(SRC
   intern/font.c
   intern/freestyle.c
   intern/geometry_set.cc
+  intern/geometry_set_instances.cc
   intern/gpencil.c
   intern/gpencil_curve.c
   intern/gpencil_geom.c
@@ -197,7 +199,7 @@ set(SRC
   intern/multires_unsubdivide.c
   intern/multires_versioning.c
   intern/nla.c
-  intern/node.c
+  intern/node.cc
   intern/object.c
   intern/object_deform.c
   intern/object_dupli.c
@@ -259,6 +261,7 @@ set(SRC
   intern/unit.c
   intern/volume.cc
   intern/volume_render.cc
+  intern/volume_to_mesh.cc
   intern/workspace.c
   intern/world.c
   intern/writeavi.c
@@ -325,6 +328,7 @@ set(SRC
   BKE_freestyle.h
   BKE_geometry_set.h
   BKE_geometry_set.hh
+  BKE_geometry_set_instances.hh
   BKE_global.h
   BKE_gpencil.h
   BKE_gpencil_curve.h
@@ -413,6 +417,7 @@ set(SRC
   BKE_unit.h
   BKE_volume.h
   BKE_volume_render.h
+  BKE_volume_to_mesh.hh
   BKE_workspace.h
   BKE_world.h
   BKE_writeavi.h
@@ -683,7 +688,7 @@ endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC
-     ../../../intern/openvdb
+    ../../../intern/openvdb
   )
   list(APPEND INC_SYS
     ${OPENVDB_INCLUDE_DIRS}
@@ -697,10 +702,10 @@ endif()
 
 if(WITH_QUADRIFLOW)
   list(APPEND INC
-     ../../../intern/quadriflow
+    ../../../intern/quadriflow
   )
   list(APPEND LIB
-     bf_intern_quadriflow
+    bf_intern_quadriflow
   )
   add_definitions(-DWITH_QUADRIFLOW)
 endif()

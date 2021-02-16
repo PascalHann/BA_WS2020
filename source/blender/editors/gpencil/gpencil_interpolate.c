@@ -48,31 +48,22 @@
 
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_report.h"
 
 #include "UI_interface.h"
-#include "UI_resources.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
-#include "RNA_enum_types.h"
-
-#include "UI_view2d.h"
 
 #include "ED_gpencil.h"
-#include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_space_api.h"
-#include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_query.h"
 
 #include "gpencil_intern.h"
 
@@ -555,9 +546,7 @@ static int gpencil_interpolate_invoke(bContext *C, wmOperator *op, const wmEvent
   }
 
   if (GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd)) {
-    BKE_report(op->reports,
-               RPT_ERROR,
-               "Cannot interpolate in curve edit mode");
+    BKE_report(op->reports, RPT_ERROR, "Cannot interpolate in curve edit mode");
     return OPERATOR_CANCELLED;
   }
 
@@ -736,7 +725,7 @@ void GPENCIL_OT_interpolate(wmOperatorType *ot)
   ot->flag = OPTYPE_UNDO | OPTYPE_BLOCKING;
 
   /* properties */
-  RNA_def_float_percentage(
+  RNA_def_float_factor(
       ot->srna,
       "shift",
       0.0f,
@@ -986,9 +975,7 @@ static int gpencil_interpolate_seq_exec(bContext *C, wmOperator *op)
   }
 
   if (GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd)) {
-    BKE_report(op->reports,
-               RPT_ERROR,
-               "Cannot interpolate in curve edit mode");
+    BKE_report(op->reports, RPT_ERROR, "Cannot interpolate in curve edit mode");
     return OPERATOR_CANCELLED;
   }
 

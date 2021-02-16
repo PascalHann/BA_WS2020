@@ -2287,12 +2287,6 @@ TreeElementIcon tree_element_get_icon(TreeStoreElem *tselem, TreeElement *te)
       case TSE_R_LAYER:
         data.icon = ICON_RENDER_RESULT;
         break;
-      case TSE_LINKED_LAMP:
-        data.icon = ICON_LIGHT_DATA;
-        break;
-      case TSE_LINKED_MAT:
-        data.icon = ICON_MATERIAL_DATA;
-        break;
       case TSE_POSEGRP_BASE:
       case TSE_POSEGRP:
         data.icon = ICON_GROUP_BONE;
@@ -2695,13 +2689,16 @@ static void outliner_draw_iconrow_number(const uiFontStyle *fstyle,
   float offset_x = (float)offsx + UI_UNIT_X * 0.35f;
 
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_aa(true,
-                      offset_x + ufac,
-                      (float)ys - UI_UNIT_Y * 0.2f + ufac,
-                      offset_x + UI_UNIT_X - ufac,
-                      (float)ys - UI_UNIT_Y * 0.2f + UI_UNIT_Y - ufac,
-                      (float)UI_UNIT_Y / 2.0f - ufac,
-                      color);
+  UI_draw_roundbox_aa(
+      &(const rctf){
+          .xmin = offset_x + ufac,
+          .xmax = offset_x + UI_UNIT_X - ufac,
+          .ymin = (float)ys - UI_UNIT_Y * 0.2f + ufac,
+          .ymax = (float)ys - UI_UNIT_Y * 0.2f + UI_UNIT_Y - ufac,
+      },
+      true,
+      (float)UI_UNIT_Y / 2.0f - ufac,
+      color);
 
   /* Now the numbers. */
   uchar text_col[4];
@@ -2751,8 +2748,26 @@ static void outliner_draw_active_indicator(const float minx,
   const float radius = UI_UNIT_Y / 4.0f;
 
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
-  UI_draw_roundbox_aa(true, minx, miny + ufac, maxx, maxy - ufac, radius, icon_color);
-  UI_draw_roundbox_aa(false, minx, miny + ufac, maxx, maxy - ufac, radius, icon_border);
+  UI_draw_roundbox_aa(
+      &(const rctf){
+          .xmin = minx,
+          .xmax = maxx,
+          .ymin = miny + ufac,
+          .ymax = maxy - ufac,
+      },
+      true,
+      radius,
+      icon_color);
+  UI_draw_roundbox_aa(
+      &(const rctf){
+          .xmin = minx,
+          .xmax = maxx,
+          .ymin = miny + ufac,
+          .ymax = maxy - ufac,
+      },
+      false,
+      radius,
+      icon_border);
   GPU_blend(GPU_BLEND_ALPHA); /* Roundbox disables. */
 }
 
@@ -3038,7 +3053,7 @@ static void outliner_draw_tree_element(bContext *C,
     }
     else {
       active = tree_element_type_active(C, tvc, space_outliner, te, tselem, OL_SETSEL_NONE, false);
-      /* active collection*/
+      /* Active collection. */
     }
 
     /* active circle */
@@ -3058,7 +3073,7 @@ static void outliner_draw_tree_element(bContext *C,
     }
     else if (te->subtree.first || (tselem->type == 0 && te->idcode == ID_SCE) ||
              (te->flag & TE_LAZY_CLOSED)) {
-      /* open/close icon, only when sublevels, except for scene */
+      /* Open/close icon, only when sub-levels, except for scene. */
       int icon_x = startx;
 
       /* Icons a bit higher. */
@@ -3496,7 +3511,7 @@ static void outliner_draw_tree(bContext *C,
     GPU_scissor(0, 0, mask_x, region->winy);
   }
 
-  /* Draw hierarhcy lines for collections and object children. */
+  /* Draw hierarchy lines for collections and object children. */
   starty = (int)region->v2d.tot.ymax - OL_Y_OFFSET;
   startx = mode_column_offset + UI_UNIT_X / 2 - (U.pixelsize + 1) / 2;
   outliner_draw_hierarchy_lines(space_outliner, &space_outliner->tree, startx, &starty);
