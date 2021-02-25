@@ -171,6 +171,8 @@ class Camera : public Node {
   ProjectionTransform worldtondc;
   Transform worldtocamera;
 
+  ProjectionTransform full_worldtoraster;
+
   ProjectionTransform rastertocamera;
   ProjectionTransform cameratoraster;
 

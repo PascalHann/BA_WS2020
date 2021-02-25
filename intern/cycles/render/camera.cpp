@@ -292,6 +292,8 @@ void Camera::update(Scene *scene)
   worldtondc = screentondc * worldtoscreen;
   worldtoraster = ndctoraster * worldtondc;
 
+  full_worldtoraster = full_ndctoraster*worldtondc;
+
   /* differentials */
   if (camera_type == CAMERA_ORTHOGRAPHIC) {
     dx = transform_perspective_direction(&rastertocamera, make_float3(1, 0, 0));
