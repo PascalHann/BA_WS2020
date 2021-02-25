@@ -281,6 +281,10 @@ void Scene::device_update(Device *device_, Progress &progress)
   progress.set_status("Updating Meshes");
   geometry_manager->device_update(device, &dscene, this, progress);
 
+  foreach (Object *object, objects) {
+    object->bounds2D = object->compute_raster_bounds(object->bounds, camera->full_worldtoraster);
+  }
+
   if (progress.get_cancel() || device->have_error())
     return;
 

@@ -1945,8 +1945,6 @@ void GeometryManager::device_update(Device *device,
     vector<Object *> volume_objects;
     foreach (Object *object, scene->objects) {
       object->compute_bounds(motion_blur);
-      object->bounds2D = object->compute_raster_bounds(object->bounds,
-                                                       scene->camera->full_worldtoraster);
     }
   }
 
