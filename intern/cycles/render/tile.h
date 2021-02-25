@@ -20,6 +20,7 @@
 #include <limits.h>
 
 #include "render/buffers.h"
+#include "util/util_boundbox.h"
 #include "util/util_list.h"
 
 CCL_NAMESPACE_BEGIN
@@ -69,6 +70,7 @@ class TileManager {
   BufferParams params;
 
   struct State {
+    vector<BoundBox2D> geometry_bounds;
     vector<Tile> tiles;
     int tile_stride;
     BufferParams buffer;

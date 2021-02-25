@@ -54,7 +54,8 @@ class Object : public Node {
   NODE_SOCKET_API(Geometry *, geometry)
   NODE_SOCKET_API(Transform, tfm)
   BoundBox bounds;
-  BoundBox old_bounds;
+  BoundBox2D bounds2D;
+  BoundBox2D old_bounds2D;
   NODE_SOCKET_API(uint, random_id)
   NODE_SOCKET_API(int, pass_id)
   NODE_SOCKET_API(float3, color)

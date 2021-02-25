@@ -110,6 +110,8 @@ Object::Object() : Node(node_type)
   particle_index = 0;
   attr_map_offset = 0;
   bounds = BoundBox::empty;
+  bounds2D = BoundBox2D();
+  old_bounds2D = BoundBox2D();
 }
 
 Object::~Object()
@@ -183,8 +185,8 @@ BoundBox2D Object::compute_raster_bounds(BoundBox bbox, ProjectionTransform worl
 
   result.left = min.x;
   result.right = max.x;
-  result.top = min.y;
-  result.bottom = max.y;
+  result.top = max.y;
+  result.bottom = min.y;
 
   return result;
 }

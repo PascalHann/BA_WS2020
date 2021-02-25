@@ -332,10 +332,24 @@ int TileManager::gen_tiles(bool sliced)
 
     for (int tile_y = 0; tile_y < tile_h; tile_y++) {
       for (int tile_x = 0; tile_x < tile_w; tile_x++, idx++) {
-        int x = tile_x * tile_size.x;
+        /* int x = tile_x * tile_size.x;
         int y = tile_y * tile_size.y;
         int w = (tile_x == tile_w - 1) ? image_w - x : tile_size.x;
         int h = (tile_y == tile_h - 1) ? slice_h - y : tile_size.y;
+        */
+        int x, y, w, h;
+        if (!state.geometry_bounds.empty()) {
+          x = state.geometry_bounds[0].left;
+          y = state.geometry_bounds[0].bottom;
+          w = state.geometry_bounds[0].width();
+          h = state.geometry_bounds[0].height();
+        }
+        else {
+          x = tile_x * tile_size.x;
+          y = tile_y * tile_size.y;
+          w = (tile_x == tile_w - 1) ? image_w - x : tile_size.x;
+          h = (tile_y == tile_h - 1) ? slice_h - y : tile_size.y;
+        }
 
         state.tiles.push_back(
             Tile(idx, x, y + slice_y, w, h, sliced ? slice : cur_device, Tile::RENDER));
