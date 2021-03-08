@@ -508,6 +508,7 @@ geometry_node_categories = [
         NodeItem("GeometryNodeCollectionInfo"),
         NodeItem("FunctionNodeRandomFloat"),
         NodeItem("ShaderNodeValue"),
+        NodeItem("FunctionNodeInputString"),
         NodeItem("FunctionNodeInputVector"),
         NodeItem("GeometryNodeIsViewport"),
     ]),
@@ -516,6 +517,7 @@ geometry_node_categories = [
         NodeItem("GeometryNodeTriangulate"),
         NodeItem("GeometryNodeEdgeSplit"),
         NodeItem("GeometryNodeSubdivisionSurface"),
+        NodeItem("GeometryNodeSubdivisionSurfaceSimple"),
     ]),
     GeometryNodeCategory("GEO_POINT", "Point", items=[
         NodeItem("GeometryNodePointDistribute"),
@@ -541,6 +543,7 @@ geometry_node_categories = [
         NodeItem("ShaderNodeSeparateXYZ"),
         NodeItem("ShaderNodeCombineXYZ"),
         NodeItem("ShaderNodeVectorMath"),
+        NodeItem("ShaderNodeVectorRotate"),
     ]),
     GeometryNodeCategory("GEO_GROUP", "Group", items=node_group_items),
     GeometryNodeCategory("GEO_LAYOUT", "Layout", items=[
