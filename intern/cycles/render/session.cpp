@@ -77,6 +77,7 @@ Session::Session(const SessionParams &params_)
 
   buffers = NULL;
   display = NULL;
+  display2 = NULL;
 
   /* Validate denoising parameters. */
   set_denoising(params.denoising);
@@ -93,6 +94,7 @@ Session::Session(const SessionParams &params_)
   if (!(params.background && !params.write_render_cb)) {
     buffers = new RenderBuffers(device);
     display = new DisplayBuffer(device, params.display_buffer_linear);
+    display2 = new DisplayBuffer(device, params.display_buffer_linear);
   }
 }
 
@@ -119,6 +121,7 @@ Session::~Session()
 
   delete buffers;
   delete display;
+  delete display2;
   delete scene;
   delete device;
 
@@ -193,8 +196,8 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
   if (gpu_draw_ready) {
     /* then verify the buffers have the expected size, so we don't
      * draw previous results in a resized window */
-    if (buffer_params.width == display->params.width &&
-        buffer_params.height == display->params.height) {
+    if (buffer_params.width == display2->params.width &&
+        buffer_params.height == display2->params.height) {
       /* for CUDA we need to do tone-mapping still, since we can
        * only access GL buffers from the main thread. */
       if (gpu_need_display_buffer_update) {
@@ -204,7 +207,7 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
         gpu_need_display_buffer_update_cond.notify_all();
       }
 
-      display->draw(device, draw_params);
+      display2->draw(device, draw_params);
 
       if (display_outdated && (time_dt() - reset_time) > params.text_timeout)
         return false;
@@ -920,6 +923,9 @@ void Session::reset_(BufferParams &buffer_params, int samples)
     if (display) {
       display->reset(buffer_params);
     }
+    if (display2) {
+      display2->reset(buffer_params);
+    }
   }
 
   tile_manager.reset(buffer_params, samples);
@@ -1235,8 +1241,14 @@ void Session::copy_to_display_buffer(int sample)
   task.y = tile_manager.state.buffer.full_y;
   task.w = tile_manager.state.buffer.width;
   task.h = tile_manager.state.buffer.height;
-  task.rgba_byte = display->rgba_byte.device_pointer;
-  task.rgba_half = display->rgba_half.device_pointer;
+  if (tile_manager.state.new_pass) {
+    task.rgba_byte = display2->rgba_byte.device_pointer;
+    task.rgba_half = display2->rgba_half.device_pointer;
+  }
+  else {
+    task.rgba_byte = display->rgba_byte.device_pointer;
+    task.rgba_half = display->rgba_half.device_pointer;
+  }
   task.buffer = buffers->buffer.device_pointer;
   task.sample = sample;
   tile_manager.state.buffer.get_offset_stride(task.offset, task.stride);
@@ -1246,7 +1258,13 @@ void Session::copy_to_display_buffer(int sample)
     device->task_wait();
 
     /* set display to new size */
-    display->draw_set(task.w, task.h);
+    if (tile_manager.state.new_pass) {
+      display2->draw_set(task.w, task.h);
+    }
+    else {
+      display->draw_set(task.w, task.h);
+      tile_manager.state.new_pass = true;
+    }
 
     last_display_time = time_dt();
   }

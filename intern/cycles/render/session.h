@@ -133,6 +133,7 @@ class Session {
   Scene *scene;
   RenderBuffers *buffers;
   DisplayBuffer *display;
+  DisplayBuffer *display2;
   Progress progress;
   SessionParams params;
   TileManager tile_manager;

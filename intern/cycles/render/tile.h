@@ -78,6 +78,7 @@ class TileManager {
     int num_samples;
     int resolution_divider;
     int num_tiles;
+    bool new_pass = false;
 
     /* Total samples over all pixels: Generally num_samples*num_pixels,
      * but can be higher due to the initial resolution division for previews. */

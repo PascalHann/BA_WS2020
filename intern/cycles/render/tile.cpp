@@ -338,7 +338,7 @@ int TileManager::gen_tiles(bool sliced)
         int h = (tile_y == tile_h - 1) ? slice_h - y : tile_size.y;
         */
         int x, y, w, h;
-        if (!state.geometry_bounds.empty()) {
+        if (!state.geometry_bounds.empty() && state.new_pass) {
           x = state.geometry_bounds[0].left;
           y = state.geometry_bounds[0].bottom;
           w = state.geometry_bounds[0].width();
