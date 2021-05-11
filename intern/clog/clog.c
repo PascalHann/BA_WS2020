@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -80,6 +81,8 @@ typedef struct CLG_IDFilter {
 typedef struct CLogContext {
   /** Single linked list of types.  */
   CLG_LogType *types;
+  /** Single linked list of references.  */
+  CLG_LogRef *refs;
 #ifdef WITH_CLOG_PTHREADS
   pthread_mutex_t types_lock;
 #endif
@@ -303,19 +306,27 @@ static enum eCLogColor clg_severity_to_color(enum CLG_Severity severity)
  * - `foo` exact match of `foo`.
  * - `foo.bar` exact match for `foo.bar`
  * - `foo.*` match for `foo` & `foo.bar` & `foo.bar.baz`
+ * - `*bar*` match for `foo.bar` & `baz.bar` & `foo.barbaz`
  * - `*` matches everything.
  */
 static bool clg_ctx_filter_check(CLogContext *ctx, const char *identifier)
 {
-  const int identifier_len = strlen(identifier);
+  const size_t identifier_len = strlen(identifier);
   for (uint i = 0; i < 2; i++) {
     const CLG_IDFilter *flt = ctx->filters[i];
     while (flt != NULL) {
-      const int len = strlen(flt->match);
+      const size_t len = strlen(flt->match);
       if (STREQ(flt->match, "*") || ((len == identifier_len) && (STREQ(identifier, flt->match)))) {
         return (bool)i;
       }
-      if ((len >= 2) && (STREQLEN(".*", &flt->match[len - 2], 2))) {
+      if (flt->match[0] == '*' && flt->match[len - 1] == '*') {
+        char *match = MEM_callocN(sizeof(char) * len - 1, __func__);
+        memcpy(match, flt->match + 1, len - 2);
+        if (strstr(identifier, match) != NULL) {
+          return (bool)i;
+        }
+      }
+      else if ((len >= 2) && (STREQLEN(".*", &flt->match[len - 2], 2))) {
         if (((identifier_len == len - 2) && STREQLEN(identifier, flt->match, len - 2)) ||
             ((identifier_len >= len - 1) && STREQLEN(identifier, flt->match, len - 1))) {
           return (bool)i;
@@ -664,6 +675,12 @@ static void CLG_ctx_free(CLogContext *ctx)
     MEM_freeN(item);
   }
 
+  while (ctx->refs != NULL) {
+    CLG_LogRef *item = ctx->refs;
+    ctx->refs = item->next;
+    item->type = NULL;
+  }
+
   for (uint i = 0; i < 2; i++) {
     while (ctx->filters[i] != NULL) {
       CLG_IDFilter *item = ctx->filters[i];
@@ -760,6 +777,10 @@ void CLG_logref_init(CLG_LogRef *clg_ref)
   pthread_mutex_lock(&g_ctx->types_lock);
 #endif
   if (clg_ref->type == NULL) {
+    /* Add to the refs list so we can NULL the pointers to 'type' when CLG_exit() is called. */
+    clg_ref->next = g_ctx->refs;
+    g_ctx->refs = clg_ref;
+
     CLG_LogType *clg_ty = clg_ctx_type_find_by_name(g_ctx, clg_ref->identifier);
     if (clg_ty == NULL) {
       clg_ty = clg_ctx_type_register(g_ctx, clg_ref->identifier);

@@ -53,6 +53,10 @@ class GPENCIL_MT_material_context_menu(Menu):
         layout.operator("gpencil.material_to_vertex_color", text="Convert Materials to Vertex Color")
         layout.operator("gpencil.extract_palette_vertex", text="Extract Palette from Vertex Color")
 
+        layout.separator()
+        layout.menu("VIEW3D_MT_gpencil_append_active_material")
+        layout.menu("VIEW3D_MT_gpencil_append_all_materials")
+
 
 class GPENCIL_UL_matslots(UIList):
     def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
@@ -245,8 +249,8 @@ class MATERIAL_PT_gpencil_custom_props(GPMaterialButtonsPanel, PropertyPanel, Pa
     _property_type = bpy.types.Material
 
 
-class MATERIAL_PT_gpencil_options(GPMaterialButtonsPanel, Panel):
-    bl_label = "Options"
+class MATERIAL_PT_gpencil_settings(GPMaterialButtonsPanel, Panel):
+    bl_label = "Settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -275,7 +279,7 @@ classes = (
     MATERIAL_PT_gpencil_surface,
     MATERIAL_PT_gpencil_strokecolor,
     MATERIAL_PT_gpencil_fillcolor,
-    MATERIAL_PT_gpencil_options,
+    MATERIAL_PT_gpencil_settings,
     MATERIAL_PT_gpencil_custom_props,
 )
 

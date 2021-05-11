@@ -105,8 +105,6 @@
  * it messes up transform. */
 #undef SEQ_ALL_BEGIN
 #undef SEQ_ALL_END
-#undef SEQ_CURRENT_BEGIN
-#undef SEQ_CURRENT_END
 
 static Sequence *special_seq_update = NULL;
 
@@ -1312,6 +1310,7 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain,
   SEQ_render_new_render_data(
       bmain, depsgraph, scene, rectx, recty, sseq->render_size, false, &context);
   context.view_id = BKE_scene_multiview_view_id_get(&scene->r, viewname);
+  context.use_proxies = (sseq->flag & SEQ_USE_PROXIES) != 0;
 
   /* Sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
    * by Escape pressed somewhere in the past. */
@@ -1523,10 +1522,10 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
                                            ImBuf *ibuf,
                                            bool *r_glsl_used,
                                            eGPUTextureFormat *r_format,
-                                           eGPUDataFormat *r_data)
+                                           eGPUDataFormat *r_data,
+                                           void **r_buffer_cache_handle)
 {
   void *display_buffer;
-  void *cache_handle = NULL;
   bool force_fallback = false;
   *r_glsl_used = false;
   force_fallback |= (ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL);
@@ -1579,12 +1578,9 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
   /* There is data to be displayed, but GLSL is not initialized
    * properly, in this case we fallback to CPU-based display transform. */
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
-    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
+    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, r_buffer_cache_handle);
     *r_format = GPU_RGBA8;
     *r_data = GPU_DATA_UBYTE;
-  }
-  if (cache_handle) {
-    IMB_display_buffer_release(cache_handle);
   }
 
   return display_buffer;
@@ -1659,6 +1655,7 @@ static void sequencer_draw_display_buffer(const bContext *C,
                                           bool draw_backdrop)
 {
   void *display_buffer;
+  void *buffer_cache_handle = NULL;
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {
     GPU_blend(GPU_BLEND_ALPHA);
@@ -1686,7 +1683,8 @@ static void sequencer_draw_display_buffer(const bContext *C,
     data = GPU_DATA_UBYTE;
   }
   else {
-    display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &data);
+    display_buffer = sequencer_OCIO_transform_ibuf(
+        C, ibuf, &glsl_used, &format, &data, &buffer_cache_handle);
   }
 
   if (draw_backdrop) {
@@ -1744,6 +1742,10 @@ static void sequencer_draw_display_buffer(const bContext *C,
   }
   else {
     IMB_colormanagement_finish_glsl_draw();
+  }
+
+  if (buffer_cache_handle) {
+    IMB_display_buffer_release(buffer_cache_handle);
   }
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {
@@ -1817,6 +1819,35 @@ static ImBuf *sequencer_get_scope(Scene *scene, SpaceSeq *sseq, ImBuf *ibuf, boo
   return scope;
 }
 
+static bool sequencer_draw_get_transform_preview(SpaceSeq *sseq, Scene *scene)
+{
+  Sequence *last_seq = SEQ_select_active_get(scene);
+  if (last_seq == NULL) {
+    return false;
+  }
+
+  return (G.moving & G_TRANSFORM_SEQ) && (last_seq->flag & SELECT) &&
+         ((last_seq->flag & SEQ_LEFTSEL) || (last_seq->flag & SEQ_RIGHTSEL)) &&
+         (sseq->draw_flag & SEQ_DRAW_TRANSFORM_PREVIEW);
+}
+
+static int sequencer_draw_get_transform_preview_frame(Scene *scene)
+{
+  Sequence *last_seq = SEQ_select_active_get(scene);
+  /* #sequencer_draw_get_transform_preview must already have been called. */
+  BLI_assert(last_seq != NULL);
+  int preview_frame;
+
+  if (last_seq->flag & SEQ_RIGHTSEL) {
+    preview_frame = last_seq->enddisp - 1;
+  }
+  else {
+    preview_frame = last_seq->startdisp;
+  }
+
+  return preview_frame;
+}
+
 void sequencer_draw_preview(const bContext *C,
                             Scene *scene,
                             ARegion *region,
@@ -1841,9 +1872,14 @@ void sequencer_draw_preview(const bContext *C,
     return;
   }
 
+  int preview_frame = timeline_frame;
+  if (sequencer_draw_get_transform_preview(sseq, scene)) {
+    preview_frame = sequencer_draw_get_transform_preview_frame(scene);
+  }
+
   /* Get image. */
   ibuf = sequencer_ibuf_get(
-      bmain, region, depsgraph, scene, sseq, timeline_frame, offset, names[sseq->multiview_eye]);
+      bmain, region, depsgraph, scene, sseq, preview_frame, offset, names[sseq->multiview_eye]);
 
   /* Setup off-screen buffers. */
   GPUViewport *viewport = WM_draw_region_get_viewport(region);
@@ -2355,7 +2391,12 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
 
   /* Only draw backdrop in timeline view. */
   if (sseq->view == SEQ_VIEW_SEQUENCE && sseq->draw_flag & SEQ_DRAW_BACKDROP) {
-    sequencer_draw_preview(C, scene, region, sseq, scene->r.cfra, 0, false, true);
+    int preview_frame = scene->r.cfra;
+    if (sequencer_draw_get_transform_preview(sseq, scene)) {
+      preview_frame = sequencer_draw_get_transform_preview_frame(scene);
+    }
+
+    sequencer_draw_preview(C, scene, region, sseq, preview_frame, 0, false, true);
     UI_view2d_view_ortho(v2d);
   }
 

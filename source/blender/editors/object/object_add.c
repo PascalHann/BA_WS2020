@@ -31,6 +31,7 @@
 #include "DNA_camera_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
 #include "DNA_light_types.h"
@@ -68,6 +69,7 @@
 #include "BKE_geometry_set.h"
 #include "BKE_gpencil_curve.h"
 #include "BKE_gpencil_geom.h"
+#include "BKE_gpencil_modifier.h"
 #include "BKE_hair.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
@@ -115,6 +117,7 @@
 #include "ED_physics.h"
 #include "ED_render.h"
 #include "ED_screen.h"
+#include "ED_select_utils.h"
 #include "ED_transform.h"
 #include "ED_view3d.h"
 
@@ -480,9 +483,7 @@ bool ED_object_add_generic_get_opts(bContext *C,
 
   if (local_view_bits) {
     View3D *v3d = CTX_wm_view3d(C);
-    if (v3d && v3d->localvd) {
-      *local_view_bits = v3d->local_view_uuid;
-    }
+    *local_view_bits = (v3d && v3d->localvd) ? v3d->local_view_uuid : 0;
   }
 
   /* Location! */
@@ -859,8 +860,9 @@ static int effector_add_exec(bContext *C, wmOperator *op)
 
     float mat[4][4];
     ED_object_new_primitive_matrix(C, ob, loc, rot, mat);
+    mul_mat3_m4_fl(mat, dia);
     BLI_addtail(&cu->editnurb->nurbs,
-                ED_curve_add_nurbs_primitive(C, ob, mat, CU_NURBS | CU_PRIM_PATH, dia));
+                ED_curve_add_nurbs_primitive(C, ob, mat, CU_NURBS | CU_PRIM_PATH, 1));
     if (!enter_editmode) {
       ED_object_editmode_exit_ex(bmain, scene, ob, EM_FREEDATA);
     }
@@ -1305,10 +1307,12 @@ static bool object_gpencil_add_poll(bContext *C)
 
 static int object_gpencil_add_exec(bContext *C, wmOperator *op)
 {
-  Object *ob = CTX_data_active_object(C);
+  Object *ob = CTX_data_active_object(C), *ob_orig = ob;
   bGPdata *gpd = (ob && (ob->type == OB_GPENCIL)) ? ob->data : NULL;
 
   const int type = RNA_enum_get(op->ptr, "type");
+  const bool use_in_front = RNA_boolean_get(op->ptr, "use_in_front");
+  const int stroke_depth_order = RNA_enum_get(op->ptr, "stroke_depth_order");
 
   ushort local_view_bits;
   float loc[3], rot[3];
@@ -1319,18 +1323,26 @@ static int object_gpencil_add_exec(bContext *C, wmOperator *op)
   if (!ED_object_add_generic_get_opts(C, op, 'Y', loc, rot, NULL, NULL, &local_view_bits, NULL)) {
     return OPERATOR_CANCELLED;
   }
-  /* add new object if not currently editing a GP object,
-   * or if "empty" was chosen (i.e. user wants a blank GP canvas)
-   */
-  if ((gpd == NULL) || (GPENCIL_ANY_MODE(gpd) == false) || (type == GP_EMPTY)) {
+  /* Add new object if not currently editing a GP object. */
+  if ((gpd == NULL) || (GPENCIL_ANY_MODE(gpd) == false)) {
     const char *ob_name = NULL;
     switch (type) {
+      case GP_EMPTY: {
+        ob_name = "GPencil";
+        break;
+      }
       case GP_MONKEY: {
         ob_name = "Suzanne";
         break;
       }
       case GP_STROKE: {
         ob_name = "Stroke";
+        break;
+      }
+      case GP_LRT_OBJECT:
+      case GP_LRT_SCENE:
+      case GP_LRT_COLLECTION: {
+        ob_name = "Line Art";
         break;
       }
       default: {
@@ -1349,6 +1361,13 @@ static int object_gpencil_add_exec(bContext *C, wmOperator *op)
 
   /* create relevant geometry */
   switch (type) {
+    case GP_EMPTY: {
+      float mat[4][4];
+
+      ED_object_new_primitive_matrix(C, ob, loc, rot, mat);
+      ED_gpencil_create_blank(C, ob, mat);
+      break;
+    }
     case GP_STROKE: {
       float radius = RNA_float_get(op->ptr, "radius");
       float mat[4][4];
@@ -1373,10 +1392,58 @@ static int object_gpencil_add_exec(bContext *C, wmOperator *op)
       ED_gpencil_create_monkey(C, ob, mat);
       break;
     }
-    case GP_EMPTY:
-      /* do nothing */
-      break;
+    case GP_LRT_SCENE:
+    case GP_LRT_COLLECTION:
+    case GP_LRT_OBJECT: {
+      float radius = RNA_float_get(op->ptr, "radius");
+      float mat[4][4];
 
+      ED_object_new_primitive_matrix(C, ob, loc, rot, mat);
+      mul_v3_fl(mat[0], radius);
+      mul_v3_fl(mat[1], radius);
+      mul_v3_fl(mat[2], radius);
+
+      ED_gpencil_create_lineart(C, ob);
+
+      gpd = ob->data;
+
+      /* Add Line Art modifier */
+      LineartGpencilModifierData *md = (LineartGpencilModifierData *)BKE_gpencil_modifier_new(
+          eGpencilModifierType_Lineart);
+      BLI_addtail(&ob->greasepencil_modifiers, md);
+      BKE_gpencil_modifier_unique_name(&ob->greasepencil_modifiers, (GpencilModifierData *)md);
+
+      if (type == GP_LRT_COLLECTION) {
+        md->source_type = LRT_SOURCE_COLLECTION;
+        md->source_collection = CTX_data_collection(C);
+      }
+      else if (type == GP_LRT_OBJECT) {
+        md->source_type = LRT_SOURCE_OBJECT;
+        md->source_object = ob_orig;
+      }
+      else {
+        /* Whole scene. */
+        md->source_type = LRT_SOURCE_SCENE;
+      }
+      /* Only created one layer and one material. */
+      strcpy(md->target_layer, ((bGPDlayer *)gpd->layers.first)->info);
+      md->target_material = BKE_gpencil_material(ob, 1);
+      if (md->target_material) {
+        id_us_plus(&md->target_material->id);
+      }
+
+      /* Stroke object is drawn in front of meshes by default. */
+      if (use_in_front) {
+        ob->dtx |= OB_DRAW_IN_FRONT;
+      }
+      else {
+        if (stroke_depth_order == GP_DRAWMODE_3D) {
+          gpd->draw_mode = GP_DRAWMODE_3D;
+        }
+      }
+
+      break;
+    }
     default:
       BKE_report(op->reports, RPT_WARNING, "Not implemented");
       break;
@@ -1393,6 +1460,38 @@ static int object_gpencil_add_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+static void object_add_ui(bContext *UNUSED(C), wmOperator *op)
+{
+  uiLayout *layout = op->layout;
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, op->ptr, "radius", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "align", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "location", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "rotation", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "type", 0, NULL, ICON_NONE);
+
+  int type = RNA_enum_get(op->ptr, "type");
+  if (type == GP_LRT_COLLECTION || type == GP_LRT_OBJECT || type == GP_LRT_SCENE) {
+    uiItemR(layout, op->ptr, "use_in_front", 0, NULL, ICON_NONE);
+    bool in_front = RNA_boolean_get(op->ptr, "use_in_front");
+    uiLayout *row = uiLayoutRow(layout, false);
+    uiLayoutSetActive(row, !in_front);
+    uiItemR(row, op->ptr, "stroke_depth_order", 0, NULL, ICON_NONE);
+  }
+}
+
+static EnumPropertyItem rna_enum_gpencil_add_stroke_depth_order_items[] = {
+    {GP_DRAWMODE_2D,
+     "2D",
+     0,
+     "2D Layers",
+     "Display strokes using grease pencil layers to define order"},
+    {GP_DRAWMODE_3D, "3D", 0, "3D Location", "Display strokes using real 3D position in 3D space"},
+    {0, NULL, 0, NULL, NULL},
+};
+
 void OBJECT_OT_gpencil_add(wmOperatorType *ot)
 {
   /* identifiers */
@@ -1408,11 +1507,26 @@ void OBJECT_OT_gpencil_add(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
+  /* ui */
+  ot->ui = object_add_ui;
+
   /* properties */
   ED_object_add_unit_props_radius(ot);
   ED_object_add_generic_props(ot, false);
 
   ot->prop = RNA_def_enum(ot->srna, "type", rna_enum_object_gpencil_type_items, 0, "Type", "");
+  RNA_def_boolean(ot->srna,
+                  "use_in_front",
+                  false,
+                  "In Front",
+                  "Show line art grease pencil in front of everything");
+  RNA_def_enum(
+      ot->srna,
+      "stroke_depth_order",
+      rna_enum_gpencil_add_stroke_depth_order_items,
+      GP_DRAWMODE_3D,
+      "Stroke Depth Order",
+      "Defines how the strokes are ordered in 3D space for objects not displayed 'In Front'");
 }
 
 /** \} */
@@ -1849,8 +1963,8 @@ void OBJECT_OT_pointcloud_add(wmOperatorType *ot)
 /* note: now unlinks constraints as well */
 void ED_object_base_free_and_unlink(Main *bmain, Scene *scene, Object *ob)
 {
-  if (BKE_library_ID_is_indirectly_used(bmain, ob) && ID_REAL_USERS(ob) <= 1 &&
-      ID_EXTRA_USERS(ob) == 0) {
+  if (ID_REAL_USERS(ob) <= 1 && ID_EXTRA_USERS(ob) == 0 &&
+      BKE_library_ID_is_indirectly_used(bmain, ob)) {
     /* We cannot delete indirectly used object... */
     printf(
         "WARNING, undeletable object '%s', should have been caught before reaching this "
@@ -1864,6 +1978,17 @@ void ED_object_base_free_and_unlink(Main *bmain, Scene *scene, Object *ob)
   BKE_scene_collections_object_remove(bmain, scene, ob, true);
 }
 
+/**
+ * Remove base from a specific scene.
+ * `ob` must not be indirectly used.
+ */
+void ED_object_base_free_and_unlink_no_indirect_check(Main *bmain, Scene *scene, Object *ob)
+{
+  BLI_assert(!BKE_library_ID_is_indirectly_used(bmain, ob));
+  DEG_id_tag_update_ex(bmain, &ob->id, ID_RECALC_BASE_FLAGS);
+  BKE_scene_collections_object_remove(bmain, scene, ob, true);
+}
+
 static int object_delete_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -1871,13 +1996,15 @@ static int object_delete_exec(bContext *C, wmOperator *op)
   wmWindowManager *wm = CTX_wm_manager(C);
   const bool use_global = RNA_boolean_get(op->ptr, "use_global");
   uint changed_count = 0;
+  uint tagged_count = 0;
 
   if (CTX_data_edit_object(C)) {
     return OPERATOR_CANCELLED;
   }
 
+  BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
+
   CTX_DATA_BEGIN (C, Object *, ob, selected_objects) {
-    const bool is_indirectly_used = BKE_library_ID_is_indirectly_used(bmain, ob);
     if (ob->id.tag & LIB_TAG_INDIRECT) {
       /* Can this case ever happen? */
       BKE_reportf(op->reports,
@@ -1886,7 +2013,9 @@ static int object_delete_exec(bContext *C, wmOperator *op)
                   ob->id.name + 2);
       continue;
     }
-    if (is_indirectly_used && ID_REAL_USERS(ob) <= 1 && ID_EXTRA_USERS(ob) == 0) {
+
+    if (ID_REAL_USERS(ob) <= 1 && ID_EXTRA_USERS(ob) == 0 &&
+        BKE_library_ID_is_indirectly_used(bmain, ob)) {
       BKE_reportf(op->reports,
                   RPT_WARNING,
                   "Cannot delete object '%s' from scene '%s', indirectly used objects need at "
@@ -1902,62 +2031,40 @@ static int object_delete_exec(bContext *C, wmOperator *op)
       DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
     }
 
-    /* This is sort of a quick hack to address T51243 -
-     * Proper thing to do here would be to nuke most of all this custom scene/object/base handling,
-     * and use generic lib remap/query for that.
-     * But this is for later (aka 2.8, once layers & co are settled and working).
-     */
-    if (use_global && ob->id.lib == NULL) {
-      /* We want to nuke the object, let's nuke it the easy way (not for linked data though)... */
-      BKE_id_delete(bmain, &ob->id);
+    /* Use multi tagged delete if `use_global=True`, or the object is used only in one scene. */
+    if (use_global || ID_REAL_USERS(ob) <= 1) {
+      ob->id.tag |= LIB_TAG_DOIT;
+      tagged_count += 1;
+    }
+    else {
+      /* Object is used in multiple scenes. Delete the object from the current scene only. */
+      ED_object_base_free_and_unlink_no_indirect_check(bmain, scene, ob);
       changed_count += 1;
-      continue;
-    }
 
-    /* remove from Grease Pencil parent */
-    /* XXX This is likely not correct?
-     *     Will also remove parent from grease pencil from other scenes,
-     *     even when use_global is false... */
-    for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
-      LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
-        if (gpl->parent != NULL) {
-          if (gpl->parent == ob) {
-            gpl->parent = NULL;
+      /* FIXME: this will also remove parent from grease pencil from other scenes. */
+      /* Remove from Grease Pencil parent */
+      for (bGPdata *gpd = bmain->gpencils.first; gpd; gpd = gpd->id.next) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          if (gpl->parent != NULL) {
+            if (gpl->parent == ob) {
+              gpl->parent = NULL;
+            }
           }
         }
       }
     }
-
-    /* remove from current scene only */
-    ED_object_base_free_and_unlink(bmain, scene, ob);
-    changed_count += 1;
-
-    if (use_global) {
-      Scene *scene_iter;
-      for (scene_iter = bmain->scenes.first; scene_iter; scene_iter = scene_iter->id.next) {
-        if (scene_iter != scene && !ID_IS_LINKED(scene_iter)) {
-          if (is_indirectly_used && ID_REAL_USERS(ob) <= 1 && ID_EXTRA_USERS(ob) == 0) {
-            BKE_reportf(op->reports,
-                        RPT_WARNING,
-                        "Cannot delete object '%s' from scene '%s', indirectly used objects need "
-                        "at least one user",
-                        ob->id.name + 2,
-                        scene_iter->id.name + 2);
-            break;
-          }
-          ED_object_base_free_and_unlink(bmain, scene_iter, ob);
-        }
-      }
-    }
-    /* end global */
   }
   CTX_DATA_END;
 
-  BKE_reportf(op->reports, RPT_INFO, "Deleted %u object(s)", changed_count);
-
-  if (changed_count == 0) {
+  if ((changed_count + tagged_count) == 0) {
     return OPERATOR_CANCELLED;
   }
+
+  if (tagged_count > 0) {
+    BKE_id_multi_tagged_delete(bmain);
+  }
+
+  BKE_reportf(op->reports, RPT_INFO, "Deleted %u object(s)", (changed_count + tagged_count));
 
   /* delete has to handle all open scenes */
   BKE_main_id_tag_listbase(&bmain->scenes, LIB_TAG_DOIT, true);
@@ -2579,6 +2686,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
 
   int a, mballConverted = 0;
   bool gpencilConverted = false;
+  bool gpencilCurveConverted = false;
 
   /* don't forget multiple users! */
 
@@ -2854,7 +2962,7 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       }
 
       cu->flag &= ~CU_3D;
-      BKE_curve_curve_dimension_update(cu);
+      BKE_curve_dimension_update(cu);
 
       if (target == OB_MESH) {
         /* No assumption should be made that the resulting objects is a mesh, as conversion can
@@ -2862,6 +2970,16 @@ static int object_convert_exec(bContext *C, wmOperator *op)
         object_data_convert_curve_to_mesh(bmain, depsgraph, newob);
         /* meshes doesn't use displist */
         BKE_object_free_curve_cache(newob);
+      }
+      else if (target == OB_GPENCIL) {
+        ushort local_view_bits = (v3d && v3d->localvd) ? v3d->local_view_uuid : 0;
+        Object *ob_gpencil = ED_gpencil_add_object(C, newob->loc, local_view_bits);
+        copy_v3_v3(ob_gpencil->rot, newob->rot);
+        copy_v3_v3(ob_gpencil->scale, newob->scale);
+        BKE_gpencil_convert_curve(bmain, scene, ob_gpencil, newob, false, 1.0f, 0.0f);
+        gpencilConverted = true;
+        gpencilCurveConverted = true;
+        basen = NULL;
       }
     }
     else if (ELEM(ob->type, OB_CURVE, OB_SURF)) {
@@ -3044,6 +3162,17 @@ static int object_convert_exec(bContext *C, wmOperator *op)
       FOREACH_SCENE_OBJECT_END;
     }
   }
+  else {
+    /* Remove Text curves converted to Grease Pencil object to avoid duplicated curves. */
+    if (gpencilCurveConverted) {
+      FOREACH_SCENE_OBJECT_BEGIN (scene, ob_delete) {
+        if (ELEM(ob_delete->type, OB_CURVE) && (ob_delete->flag & OB_DONE)) {
+          ED_object_base_free_and_unlink(bmain, scene, ob_delete);
+        }
+      }
+      FOREACH_SCENE_OBJECT_END;
+    }
+  }
 
   // XXX  ED_object_editmode_enter(C, 0);
   // XXX  exit_editmode(C, EM_FREEDATA|); /* freedata, but no undo */
@@ -3070,20 +3199,18 @@ static int object_convert_exec(bContext *C, wmOperator *op)
 static void object_convert_ui(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *layout = op->layout;
-  PointerRNA ptr;
 
   uiLayoutSetPropSep(layout, true);
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-  uiItemR(layout, &ptr, "target", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "keep_original", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "target", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "keep_original", 0, NULL, ICON_NONE);
 
-  if (RNA_enum_get(&ptr, "target") == OB_GPENCIL) {
-    uiItemR(layout, &ptr, "thickness", 0, NULL, ICON_NONE);
-    uiItemR(layout, &ptr, "angle", 0, NULL, ICON_NONE);
-    uiItemR(layout, &ptr, "offset", 0, NULL, ICON_NONE);
-    uiItemR(layout, &ptr, "seams", 0, NULL, ICON_NONE);
-    uiItemR(layout, &ptr, "faces", 0, NULL, ICON_NONE);
+  if (RNA_enum_get(op->ptr, "target") == OB_GPENCIL) {
+    uiItemR(layout, op->ptr, "thickness", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "angle", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "offset", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "seams", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "faces", 0, NULL, ICON_NONE);
   }
 }
 
@@ -3363,7 +3490,7 @@ static int object_add_named_exec(bContext *C, wmOperator *op)
 
   /* object_add_duplicate_internal() doesn't deselect other objects, unlike object_add_common() or
    * BKE_view_layer_base_deselect_all(). */
-  ED_object_base_deselect_all(view_layer, NULL, BA_DESELECT);
+  ED_object_base_deselect_all(view_layer, NULL, SEL_DESELECT);
   ED_object_base_select(basen, BA_SELECT);
   ED_object_base_activate(C, basen);
 

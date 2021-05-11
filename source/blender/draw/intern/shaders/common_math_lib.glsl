@@ -91,6 +91,11 @@ vec2 sqr(vec2 a) { return a * a; }
 vec3 sqr(vec3 a) { return a * a; }
 vec4 sqr(vec4 a) { return a * a; }
 
+/* Use manual powers for fixed powers. pow() can have unpredicatble results on some implementations.
+ * (see T87369, T87541) */
+float pow6(float x) { return sqr(sqr(x) * x); }
+float pow8(float x) { return sqr(sqr(sqr(x))); }
+
 float len_squared(vec3 a) { return dot(a, a); }
 float len_squared(vec2 a) { return dot(a, a); }
 
@@ -126,6 +131,12 @@ vec3 normalize_len(vec3 v, out float len)
 {
   len = length(v);
   return v / len;
+}
+
+vec4 safe_color(vec4 c)
+{
+  /* Clamp to avoid black square artifacts if a pixel goes NaN. */
+  return clamp(c, vec4(0.0), vec4(1e20)); /* 1e20 arbitrary. */
 }
 
 /** \} */

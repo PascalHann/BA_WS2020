@@ -1029,9 +1029,15 @@ static void gpencil_invert_image(tGPDfill *tgpf)
     /* Red->Green */
     else if (color[0] == 1.0f) {
       set_pixel(ibuf, v, fill_col[1]);
-      /* Add thickness of 2 pixels to avoid too thin lines. */
-      int offset = (v % ibuf->x < center) ? 1 : -1;
-      set_pixel(ibuf, v + offset, fill_col[1]);
+      /* Add thickness of 2 pixels to avoid too thin lines, but avoid extremes of the pixel line.
+       */
+      int row = v / ibuf->x;
+      int lowpix = row * ibuf->x;
+      int highpix = lowpix + ibuf->x - 1;
+      if ((v > lowpix) && (v < highpix)) {
+        int offset = (v % ibuf->x < center) ? 1 : -1;
+        set_pixel(ibuf, v + offset, fill_col[1]);
+      }
     }
     else {
       /* Set to Transparent. */
@@ -1241,6 +1247,7 @@ static bool dilate_shape(ImBuf *ibuf)
 static void gpencil_get_outline_points(tGPDfill *tgpf, const bool dilate)
 {
   ImBuf *ibuf;
+  Brush *brush = tgpf->brush;
   float rgba[4];
   void *lock;
   int v[2];
@@ -1273,7 +1280,9 @@ static void gpencil_get_outline_points(tGPDfill *tgpf, const bool dilate)
 
   /* Dilate. */
   if (dilate) {
-    dilate_shape(ibuf);
+    for (int i = 0; i < brush->gpencil_settings->dilate_pixels; i++) {
+      dilate_shape(ibuf);
+    }
   }
 
   for (int idx = imagesize - 1; idx != 0; idx--) {
@@ -1363,7 +1372,8 @@ static void gpencil_get_depth_array(tGPDfill *tgpf)
   if (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_VIEW) {
     /* need to restore the original projection settings before packing up */
     view3d_region_operator_needs_opengl(tgpf->win, tgpf->region);
-    ED_view3d_autodist_init(tgpf->depsgraph, tgpf->region, tgpf->v3d, 0);
+    ED_view3d_depth_override(
+        tgpf->depsgraph, tgpf->region, tgpf->v3d, NULL, V3D_DEPTH_NO_GPENCIL, false);
 
     /* Since strokes are so fine, when using their depth we need a margin
      * otherwise they might get missed. */
@@ -1709,6 +1719,15 @@ static tGPDfill *gpencil_session_init_fill(bContext *C, wmOperator *op)
       bmain, tgpf->ob, brush);
 
   tgpf->mat = ma;
+
+  /* Untag strokes to be sure nothing is pending due any canceled process. */
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &tgpf->gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+        gps->flag &= ~GP_STROKE_TAG;
+      }
+    }
+  }
 
   /* check whether the material was newly added */
   if (totcol != tgpf->ob->totcol) {

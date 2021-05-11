@@ -277,11 +277,10 @@ class TextureMaskPanel(BrushPanel):
         layout.use_property_decorate = False
 
         brush = context.tool_settings.image_paint.brush
+        mask_tex_slot = brush.mask_texture_slot
 
         col = layout.column()
-        col.template_ID_preview(brush, "mask_texture", new="texture.new", rows=3, cols=8)
-
-        mask_tex_slot = brush.mask_texture_slot
+        col.template_ID_preview(mask_tex_slot, "texture", new="texture.new", rows=3, cols=8)
 
         # map_mode
         layout.row().prop(mask_tex_slot, "mask_map_mode", text="Mask Mapping")
@@ -357,7 +356,7 @@ class StrokePanel(BrushPanel):
             col.operator("paintcurve.draw")
             col.separator()
 
-        if brush.use_space:
+        if brush.use_space or brush.use_line or brush.use_curve:
             col.separator()
             row = col.row(align=True)
             col.prop(brush, "dash_ratio", text="Dash Ratio")
@@ -1226,7 +1225,7 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
         row = layout.row(align=True)
         row.prop(gp_settings, "fill_factor")
         row = layout.row(align=True)
-        row.prop(gp_settings, "fill_leak", text="Leak Size")
+        row.prop(gp_settings, "dilate")
         row = layout.row(align=True)
         row.prop(brush, "size", text="Thickness")
         layout.use_property_split = use_property_split_prev

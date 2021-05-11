@@ -193,6 +193,8 @@ static void file_init(wmWindowManager *UNUSED(wm), ScrArea *area)
   if (sfile->runtime == NULL) {
     sfile->runtime = MEM_callocN(sizeof(*sfile->runtime), __func__);
   }
+  /* Validate the params right after file read. */
+  fileselect_refresh_params(sfile);
 }
 
 static void file_exit(wmWindowManager *wm, ScrArea *area)
@@ -418,6 +420,15 @@ static void file_on_reload_callback_call(SpaceFile *sfile)
   sfile->runtime->on_reload_custom_data = NULL;
 }
 
+static void file_reset_filelist_showing_main_data(ScrArea *area, SpaceFile *sfile)
+{
+  if (sfile->files && filelist_needs_reset_on_main_changes(sfile->files)) {
+    /* Full refresh of the file list if local asset data was changed. Refreshing this view
+     * is cheap and users expect this to be updated immediately. */
+    file_tag_reset_list(area, sfile);
+  }
+}
+
 static void file_listener(const wmSpaceTypeListenerParams *params)
 {
   ScrArea *area = params->area;
@@ -444,6 +455,11 @@ static void file_listener(const wmSpaceTypeListenerParams *params)
             ED_area_tag_refresh(area);
           }
           break;
+        case ND_SPACE_CHANGED:
+          /* If the space was just turned into a file/asset browser, the file-list may need to be
+           * updated to reflect latest changes in main data. */
+          file_reset_filelist_showing_main_data(area, sfile);
+          break;
       }
       switch (wmn->action) {
         case NA_JOB_FINISHED:
@@ -451,6 +467,15 @@ static void file_listener(const wmSpaceTypeListenerParams *params)
           break;
       }
       break;
+    case NC_ID: {
+      switch (wmn->action) {
+        case NA_RENAME:
+          /* Force list to update sorting (with a full reset for now). */
+          file_reset_filelist_showing_main_data(area, sfile);
+          break;
+      }
+      break;
+    }
     case NC_ASSET: {
       switch (wmn->action) {
         case NA_SELECTED:
@@ -459,11 +484,8 @@ static void file_listener(const wmSpaceTypeListenerParams *params)
           break;
         case NA_ADDED:
         case NA_REMOVED:
-          if (sfile->files && filelist_needs_reset_on_main_changes(sfile->files)) {
-            /* Full refresh of the file list if local asset data was changed. Refreshing this view
-             * is cheap and users expect this to be updated immediately. */
-            file_tag_reset_list(area, sfile);
-          }
+        case NA_EDITED:
+          file_reset_filelist_showing_main_data(area, sfile);
           break;
       }
       break;
@@ -641,6 +663,7 @@ static void file_operatortypes(void)
   WM_operatortype_append(FILE_OT_highlight);
   WM_operatortype_append(FILE_OT_sort_column_ui_context);
   WM_operatortype_append(FILE_OT_execute);
+  WM_operatortype_append(FILE_OT_mouse_execute);
   WM_operatortype_append(FILE_OT_cancel);
   WM_operatortype_append(FILE_OT_parent);
   WM_operatortype_append(FILE_OT_previous);
@@ -659,6 +682,7 @@ static void file_operatortypes(void)
   WM_operatortype_append(FILE_OT_smoothscroll);
   WM_operatortype_append(FILE_OT_filepath_drop);
   WM_operatortype_append(FILE_OT_start_filter);
+  WM_operatortype_append(FILE_OT_view_selected);
 }
 
 /* NOTE: do not add .blend file reading on this level */
@@ -886,13 +910,11 @@ static void file_id_remap(ScrArea *area, SpaceLink *sl, ID *UNUSED(old_id), ID *
 {
   SpaceFile *sfile = (SpaceFile *)sl;
 
-  /* If the file shows main data (IDs), tag it for reset. */
-  if (sfile->files && filelist_needs_reset_on_main_changes(sfile->files)) {
-    /* Full refresh of the file list if main data was changed, don't even attempt remap pointers.
-     * We could give file list types a id-remap callback, but it's probably not worth it.
-     * Refreshing local file lists is relatively cheap. */
-    file_tag_reset_list(area, sfile);
-  }
+  /* If the file shows main data (IDs), tag it for reset.
+   * Full reset of the file list if main data was changed, don't even attempt remap pointers.
+   * We could give file list types a id-remap callback, but it's probably not worth it.
+   * Refreshing local file lists is relatively cheap. */
+  file_reset_filelist_showing_main_data(area, sfile);
 }
 
 /* only called once, from space/spacetypes.c */

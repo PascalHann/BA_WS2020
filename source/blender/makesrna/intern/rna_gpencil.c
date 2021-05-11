@@ -2197,7 +2197,10 @@ static void rna_def_gpencil_layer(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_mask_layer", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", GP_LAYER_USE_MASK);
-  RNA_def_property_ui_text(prop, "Mask Layer", "Mask pixels from underlying layers drawing");
+  RNA_def_property_ui_text(
+      prop,
+      "Use Mask",
+      "The visibility of drawings on this layer is affected by the layers in its masks list");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_update");
 
   prop = RNA_def_property(srna, "use_lights", PROP_BOOLEAN, PROP_NONE);
@@ -2568,7 +2571,7 @@ static void rna_def_gpencil_data(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Auto-Lock Layers",
-      "Lock automatically all layers except active one to avoid accidental changes");
+      "Automatically lock all layers except the active one to avoid accidental changes");
   RNA_def_property_update(prop, NC_GPENCIL | ND_DATA, "rna_GPencil_autolock");
 
   prop = RNA_def_property(srna, "edit_line_color", PROP_FLOAT, PROP_COLOR_GAMMA);

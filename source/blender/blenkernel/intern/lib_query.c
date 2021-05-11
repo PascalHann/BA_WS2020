@@ -56,11 +56,19 @@ typedef struct LibraryForeachIDData {
    */
   ID *self_id;
 
+  /** Flags controlling the behavior of the 'foreach id' looping code. */
   int flag;
+  /** Generic flags to be passed to all callback calls for current processed data. */
   int cb_flag;
+  /** Callback flags that are forbidden for all callback calls for current processed data. */
   int cb_flag_clear;
+
+  /* Function to call for every ID pointers of current processed data, and its opaque user data
+   * pointer. */
   LibraryIDLinkCallback callback;
   void *user_data;
+  /** Store the returned value from the callback, to decide how to continue the processing of ID
+   * pointers for current data. */
   int status;
 
   /* To handle recursion. */
@@ -73,13 +81,25 @@ bool BKE_lib_query_foreachid_process(LibraryForeachIDData *data, ID **id_pp, int
   if (!(data->status & IDWALK_STOP)) {
     const int flag = data->flag;
     ID *old_id = *id_pp;
-    const int callback_return = data->callback(&(struct LibraryIDLinkCallbackData){
-        .user_data = data->user_data,
-        .bmain = data->bmain,
-        .id_owner = data->owner_id,
-        .id_self = data->self_id,
-        .id_pointer = id_pp,
-        .cb_flag = ((cb_flag | data->cb_flag) & ~data->cb_flag_clear)});
+
+    /* Update the callback flags with the ones defined (or forbidden) in `data` by the generic
+     * caller code.  */
+    cb_flag = ((cb_flag | data->cb_flag) & ~data->cb_flag_clear);
+
+    /* Update the callback flags with some extra information regarding overrides: all 'loopback',
+     * 'internal', 'embedded' etc. ID pointers are never overridable. */
+    if (cb_flag & (IDWALK_CB_INTERNAL | IDWALK_CB_EMBEDDED | IDWALK_CB_LOOPBACK |
+                   IDWALK_CB_OVERRIDE_LIBRARY_REFERENCE)) {
+      cb_flag |= IDWALK_CB_OVERRIDE_LIBRARY_NOT_OVERRIDABLE;
+    }
+
+    const int callback_return = data->callback(
+        &(struct LibraryIDLinkCallbackData){.user_data = data->user_data,
+                                            .bmain = data->bmain,
+                                            .id_owner = data->owner_id,
+                                            .id_self = data->self_id,
+                                            .id_pointer = id_pp,
+                                            .cb_flag = cb_flag});
     if (flag & IDWALK_READONLY) {
       BLI_assert(*(id_pp) == old_id);
     }
@@ -132,7 +152,10 @@ void BKE_lib_query_idpropertiesForeachIDLink_callback(IDProperty *id_prop, void 
   BLI_assert(id_prop->type == IDP_ID);
 
   LibraryForeachIDData *data = (LibraryForeachIDData *)user_data;
-  BKE_LIB_FOREACHID_PROCESS_ID(data, id_prop->data.pointer, IDWALK_CB_USER);
+  const int cb_flag = IDWALK_CB_USER | ((id_prop->flag & IDP_FLAG_OVERRIDABLE_LIBRARY) ?
+                                            0 :
+                                            IDWALK_CB_OVERRIDE_LIBRARY_NOT_OVERRIDABLE);
+  BKE_LIB_FOREACHID_PROCESS_ID(data, id_prop->data.pointer, cb_flag);
 }
 
 bool BKE_library_foreach_ID_embedded(LibraryForeachIDData *data, ID **id_pp)
@@ -183,8 +206,9 @@ static void library_foreach_ID_link(Main *bmain,
   BLI_assert(inherit_data == NULL || data.bmain == inherit_data->bmain);
 
   if (flag & IDWALK_RECURSE) {
-    /* For now, recursion implies read-only. */
+    /* For now, recursion implies read-only, and no internal pointers. */
     flag |= IDWALK_READONLY;
+    flag &= ~IDWALK_DO_INTERNAL_RUNTIME_POINTERS;
 
     data.ids_handled = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
     BLI_LINKSTACK_INIT(data.ids_todo);
@@ -230,6 +254,7 @@ static void library_foreach_ID_link(Main *bmain,
     }
 
     if (bmain != NULL && bmain->relations != NULL && (flag & IDWALK_READONLY) &&
+        (flag & IDWALK_DO_INTERNAL_RUNTIME_POINTERS) == 0 &&
         (((bmain->relations->flag & MAINIDRELATIONS_INCLUDE_UI) == 0) ==
          ((data.flag & IDWALK_INCLUDE_UI) == 0))) {
       /* Note that this is minor optimization, even in worst cases (like id being an object with
@@ -249,6 +274,11 @@ static void library_foreach_ID_link(Main *bmain,
 
     /* Note: ID.lib pointer is purposefully fully ignored here...
      * We may want to add it at some point? */
+
+    if (flag & IDWALK_DO_INTERNAL_RUNTIME_POINTERS) {
+      CALLBACK_INVOKE_ID(id->newid, IDWALK_CB_INTERNAL);
+      CALLBACK_INVOKE_ID(id->orig_id, IDWALK_CB_INTERNAL);
+    }
 
     if (id->override_library != NULL) {
       CALLBACK_INVOKE_ID(id->override_library->reference,

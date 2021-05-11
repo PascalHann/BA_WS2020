@@ -53,6 +53,8 @@
 #include "../generic/py_capi_utils.h"
 
 #include "gpu_py.h"
+#include "gpu_py_texture.h"
+
 #include "gpu_py_offscreen.h" /* own include */
 
 /* Define the free method to avoid breakage. */
@@ -184,7 +186,7 @@ PyDoc_STRVAR(pygpu_offscreen_unbind_doc,
              "\n"
              "   :arg restore: Restore the OpenGL state, can only be used when the state has been "
              "saved before.\n"
-             "   :type restore: `bool`\n");
+             "   :type restore: bool\n");
 static PyObject *pygpu_offscreen_unbind(BPyGPUOffScreen *self, PyObject *args, PyObject *kwds)
 {
   bool restore = true;
@@ -262,6 +264,17 @@ static PyObject *pygpu_offscreen_color_texture_get(BPyGPUOffScreen *self, void *
   BPY_GPU_OFFSCREEN_CHECK_OBJ(self);
   GPUTexture *texture = GPU_offscreen_color_texture(self->ofs);
   return PyLong_FromLong(GPU_texture_opengl_bindcode(texture));
+}
+
+PyDoc_STRVAR(pygpu_offscreen_texture_color_doc,
+             "The color texture attached.\n"
+             "\n"
+             ":type: :class:`gpu.types.GPUTexture`");
+static PyObject *pygpu_offscreen_texture_color_get(BPyGPUOffScreen *self, void *UNUSED(type))
+{
+  BPY_GPU_OFFSCREEN_CHECK_OBJ(self);
+  GPUTexture *texture = GPU_offscreen_color_texture(self->ofs);
+  return BPyGPUTexture_CreatePyObject(texture, true);
 }
 
 PyDoc_STRVAR(
@@ -385,6 +398,11 @@ static PyGetSetDef pygpu_offscreen__tp_getseters[] = {
      (setter)NULL,
      pygpu_offscreen_color_texture_doc,
      NULL},
+    {"texture_color",
+     (getter)pygpu_offscreen_texture_color_get,
+     (setter)NULL,
+     pygpu_offscreen_texture_color_doc,
+     NULL},
     {"width", (getter)pygpu_offscreen_width_get, (setter)NULL, pygpu_offscreen_width_doc, NULL},
     {"height", (getter)pygpu_offscreen_height_get, (setter)NULL, pygpu_offscreen_height_doc, NULL},
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
@@ -412,9 +430,9 @@ PyDoc_STRVAR(pygpu_offscreen__tp_doc,
              "   This object gives access to off screen buffers.\n"
              "\n"
              "   :arg width: Horizontal dimension of the buffer.\n"
-             "   :type width: `int`\n"
+             "   :type width: int\n"
              "   :arg height: Vertical dimension of the buffer.\n"
-             "   :type height: `int`\n");
+             "   :type height: int\n");
 PyTypeObject BPyGPUOffScreen_Type = {
     PyVarObject_HEAD_INIT(NULL, 0).tp_name = "GPUOffScreen",
     .tp_basicsize = sizeof(BPyGPUOffScreen),

@@ -1722,7 +1722,7 @@ static void gpencil_stroke_doeraser(tGPsdata *p)
     if ((gp_settings != NULL) && (gp_settings->flag & GP_BRUSH_OCCLUDE_ERASER)) {
       View3D *v3d = p->area->spacedata.first;
       view3d_region_operator_needs_opengl(p->win, p->region);
-      ED_view3d_autodist_init(p->depsgraph, p->region, v3d, 0);
+      ED_view3d_depth_override(p->depsgraph, p->region, v3d, NULL, V3D_DEPTH_NO_GPENCIL, false);
     }
   }
 
@@ -2305,8 +2305,14 @@ static void gpencil_paint_strokeend(tGPsdata *p)
 
     /* need to restore the original projection settings before packing up */
     view3d_region_operator_needs_opengl(p->win, p->region);
-    ED_view3d_autodist_init(
-        p->depsgraph, p->region, v3d, (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) ? 1 : 0);
+    ED_view3d_depth_override(p->depsgraph,
+                             p->region,
+                             v3d,
+                             NULL,
+                             (ts->gpencil_v3d_align & GP_PROJECT_DEPTH_STROKE) ?
+                                 V3D_DEPTH_GPENCIL_ONLY :
+                                 V3D_DEPTH_NO_GPENCIL,
+                             false);
   }
 
   /* check if doing eraser or not */
@@ -3671,14 +3677,6 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
        *   is essential for ensuring that they can quickly return to that view
        */
     }
-    else if ((event->type == EVT_BKEY) && (event->val == KM_RELEASE)) {
-      /* Add Blank Frame
-       * - Since this operator is non-modal, we can just call it here, and keep going...
-       * - This operator is especially useful when animating
-       */
-      WM_operator_name_call(C, "GPENCIL_OT_blank_frame_add", WM_OP_EXEC_DEFAULT, NULL);
-      estate = OPERATOR_RUNNING_MODAL;
-    }
     else if ((!ELEM(p->paintmode, GP_PAINTMODE_ERASER, GP_PAINTMODE_SET_CP))) {
       gpencil_guide_event_handling(C, op, event, p);
       estate = OPERATOR_RUNNING_MODAL;
@@ -3691,7 +3689,7 @@ static int gpencil_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
   /* Exit painting mode (and/or end current stroke).
    *
    */
-  if (ELEM(event->type, EVT_RETKEY, EVT_PADENTER, EVT_ESCKEY, EVT_SPACEKEY, EVT_EKEY)) {
+  if (ELEM(event->type, EVT_RETKEY, EVT_PADENTER, EVT_ESCKEY, EVT_SPACEKEY)) {
 
     p->status = GP_STATUS_DONE;
     estate = OPERATOR_FINISHED;

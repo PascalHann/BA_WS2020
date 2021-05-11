@@ -171,7 +171,9 @@ static void lib_id_clear_library_data_ex(Main *bmain, ID *id)
 
   /* Conceptually, an ID made local is not the same as the linked one anymore. Reflect that by
    * regenerating its session UUID. */
-  BKE_lib_libblock_session_uuid_renew(id);
+  if ((id->tag & LIB_TAG_TEMP_MAIN) == 0) {
+    BKE_lib_libblock_session_uuid_renew(id);
+  }
 
   /* We need to tag this IDs and all of its users, conceptually new local ID and original linked
    * ones are two completely different data-blocks that were virtually remapped, even though in
@@ -1139,6 +1141,7 @@ static uint global_session_uuid = 0;
 void BKE_lib_libblock_session_uuid_ensure(ID *id)
 {
   if (id->session_uuid == MAIN_ID_SESSION_UUID_UNSET) {
+    BLI_assert((id->tag & LIB_TAG_TEMP_MAIN) == 0); /* Caller must ensure this. */
     id->session_uuid = atomic_add_and_fetch_uint32(&global_session_uuid, 1);
     /* In case overflow happens, still assign a valid ID. This way opening files many times works
      * correctly. */
@@ -1261,9 +1264,7 @@ void BKE_libblock_copy_ex(Main *bmain, const ID *id, ID **r_newid, const int ori
     new_id->properties = IDP_CopyProperty_ex(id->properties, copy_data_flag);
   }
 
-  /* We may need our own flag to control that at some point, but for now 'no main' one should be
-   * good enough. */
-  if ((orig_flag & LIB_ID_CREATE_NO_MAIN) == 0) {
+  if ((orig_flag & LIB_ID_COPY_NO_LIB_OVERRIDE) == 0) {
     if (ID_IS_OVERRIDE_LIBRARY_REAL(id)) {
       /* We do not want to copy existing override rules here, as they would break the proper
        * remapping between IDs. Proper overrides rules will be re-generated anyway. */

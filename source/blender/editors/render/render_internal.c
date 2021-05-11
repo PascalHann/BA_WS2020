@@ -574,9 +574,12 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
     return;
   }
   if (rj->image_outdated) {
-    /* update entire render */
+    /* Free all render buffer caches when switching slots, with lock to ensure main
+     * thread is not drawing the buffer at the same time. */
     rj->image_outdated = false;
-    BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_COLORMANAGE);
+    ibuf = BKE_image_acquire_ibuf(ima, &rj->iuser, &lock);
+    BKE_image_free_buffers(ima);
+    BKE_image_release_ibuf(ima, ibuf, lock);
     *(rj->do_update) = true;
     return;
   }
@@ -788,8 +791,10 @@ static int render_breakjob(void *rjv)
   return 0;
 }
 
-/* for exec() when there is no render job
- * note: this wont check for the escape key being pressed, but doing so isnt threadsafe */
+/**
+ * For exec() when there is no render job
+ * note: this wont check for the escape key being pressed, but doing so isn't thread-safe.
+ */
 static int render_break(void *UNUSED(rjv))
 {
   if (G.is_break) {

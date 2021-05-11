@@ -14,14 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "node_geometry_util.hh"
-
 #include "BLI_math_matrix.h"
 
 #include "DNA_collection_types.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
+
+#include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_collection_info_in[] = {
     {SOCK_COLLECTION, N_("Collection")},
@@ -42,9 +42,7 @@ namespace blender::nodes {
 
 static void geo_node_collection_info_exec(GeoNodeExecParams params)
 {
-  bke::PersistentCollectionHandle collection_handle =
-      params.extract_input<bke::PersistentCollectionHandle>("Collection");
-  Collection *collection = params.handle_map().lookup(collection_handle);
+  Collection *collection = params.get_input<Collection *>("Collection");
 
   GeometrySet geometry_set_out;
 
@@ -58,10 +56,6 @@ static void geo_node_collection_info_exec(GeoNodeExecParams params)
   const bool transform_space_relative = (node_storage->transform_space ==
                                          GEO_NODE_TRANSFORM_SPACE_RELATIVE);
 
-  InstancedData instance;
-  instance.type = INSTANCE_DATA_TYPE_COLLECTION;
-  instance.data.collection = collection;
-
   InstancesComponent &instances = geometry_set_out.get_component_for_write<InstancesComponent>();
 
   float transform_mat[4][4];
@@ -73,7 +67,9 @@ static void geo_node_collection_info_exec(GeoNodeExecParams params)
 
     mul_m4_m4_pre(transform_mat, self_object->imat);
   }
-  instances.add_instance(instance, transform_mat, -1);
+
+  const int handle = instances.add_reference(*collection);
+  instances.add_instance(handle, transform_mat, -1);
 
   params.set_output("Geometry", geometry_set_out);
 }

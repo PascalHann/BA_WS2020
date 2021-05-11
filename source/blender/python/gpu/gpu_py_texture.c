@@ -247,7 +247,7 @@ static PyObject *pygpu_texture__tp_new(PyTypeObject *UNUSED(self), PyObject *arg
     return NULL;
   }
 
-  return BPyGPUTexture_CreatePyObject(tex);
+  return BPyGPUTexture_CreatePyObject(tex, false);
 }
 
 PyDoc_STRVAR(pygpu_texture_width_doc, "Width of the texture.\n\n:type: `int`");
@@ -272,21 +272,17 @@ static PyObject *pygpu_texture_format_get(BPyGPUTexture *self, void *UNUSED(type
   return PyUnicode_FromString(PyC_StringEnum_FindIDFromValue(pygpu_textureformat_items, format));
 }
 
-PyDoc_STRVAR(pygpu_texture_clear_doc,
-             ".. method:: clear(format='FLOAT', value=(0.0, 0.0, 0.0, 1.0))\n"
-             "\n"
-             "   Fill texture with specific value.\n"
-             "\n"
-             "   :param format: One of these primitive types: {\n"
-             "      `FLOAT`,\n"
-             "      `INT`,\n"
-             "      `UINT`,\n"
-             "      `UBYTE`,\n"
-             "      `UINT_24_8`,\n"
-             "      `10_11_11_REV`,\n"
-             "   :type type: `str`\n"
-             "   :arg value: sequence each representing the value to fill.\n"
-             "   :type value: sequence of 1, 2, 3 or 4 values\n");
+PyDoc_STRVAR(
+    pygpu_texture_clear_doc,
+    ".. method:: clear(format='FLOAT', value=(0.0, 0.0, 0.0, 1.0))\n"
+    "\n"
+    "   Fill texture with specific value.\n"
+    "\n"
+    "   :param format: The format that describes the content of a single item.\n"
+    "      Possible values are `FLOAT`, `INT`, `UINT`, `UBYTE`, `UINT_24_8` and `10_11_11_REV`.\n"
+    "   :type type: str\n"
+    "   :arg value: sequence each representing the value to fill.\n"
+    "   :type value: sequence of 1, 2, 3 or 4 values\n");
 static PyObject *pygpu_texture_clear(BPyGPUTexture *self, PyObject *args, PyObject *kwds)
 {
   BPYGPU_TEXTURE_CHECK_OBJ(self);
@@ -416,6 +412,9 @@ static PyObject *pygpu_texture_free(BPyGPUTexture *self)
 static void BPyGPUTexture__tp_dealloc(BPyGPUTexture *self)
 {
   if (self->tex) {
+#ifndef GPU_NO_USE_PY_REFERENCES
+    GPU_texture_py_reference_set(self->tex, NULL);
+#endif
     GPU_texture_free(self->tex);
   }
   Py_TYPE(self)->tp_free((PyObject *)self);
@@ -447,12 +446,12 @@ PyDoc_STRVAR(
     "   This object gives access to off GPU textures.\n"
     "\n"
     "   :arg size: Dimensions of the texture 1D, 2D, 3D or cubemap.\n"
-    "   :type size: `tuple` or `int`\n"
+    "   :type size: tuple or int\n"
     "   :arg layers: Number of layers in texture array or number of cubemaps in cubemap array\n"
-    "   :type layers: `int`\n"
+    "   :type layers: int\n"
     "   :arg is_cubemap: Indicates the creation of a cubemap texture.\n"
-    "   :type is_cubemap: `int`\n"
-    "   :arg format: One of these primitive types: {\n"
+    "   :type is_cubemap: int\n"
+    "   :arg format: Internal data format inside GPU memory. Possible values are:\n"
     "      `RGBA8UI`,\n"
     "      `RGBA8I`,\n"
     "      `RGBA8`,\n"
@@ -497,9 +496,9 @@ PyDoc_STRVAR(
     "      `DEPTH_COMPONENT32F`,\n"
     "      `DEPTH_COMPONENT24`,\n"
     "      `DEPTH_COMPONENT16`,\n"
-    "   :type format: `str`\n"
+    "   :type format: str\n"
     "   :arg data: Buffer object to fill the texture.\n"
-    "   :type data: `Buffer`\n");
+    "   :type data: :class:`gpu.types.Buffer`\n");
 PyTypeObject BPyGPUTexture_Type = {
     PyVarObject_HEAD_INIT(NULL, 0).tp_name = "GPUTexture",
     .tp_basicsize = sizeof(BPyGPUTexture),
@@ -539,10 +538,7 @@ static PyObject *pygpu_texture_from_image(PyObject *UNUSED(self), PyObject *arg)
   BKE_imageuser_default(&iuser);
   GPUTexture *tex = BKE_image_get_gpu_texture(ima, &iuser, NULL);
 
-  /* Increase the texture reference count. */
-  GPU_texture_ref(tex);
-
-  return BPyGPUTexture_CreatePyObject(tex);
+  return BPyGPUTexture_CreatePyObject(tex, true);
 }
 
 static struct PyMethodDef pygpu_texture__m_methods[] = {
@@ -599,12 +595,32 @@ PyObject *bpygpu_texture_init(void)
 /** \name Public API
  * \{ */
 
-PyObject *BPyGPUTexture_CreatePyObject(GPUTexture *tex)
+PyObject *BPyGPUTexture_CreatePyObject(GPUTexture *tex, bool shared_reference)
 {
   BPyGPUTexture *self;
 
+  if (shared_reference) {
+#ifndef GPU_NO_USE_PY_REFERENCES
+    void **ref = GPU_texture_py_reference_get(tex);
+    if (ref) {
+      /* Retrieve BPyGPUTexture reference. */
+      self = (BPyGPUTexture *)POINTER_OFFSET(ref, -offsetof(BPyGPUTexture, tex));
+      BLI_assert(self->tex == tex);
+      Py_INCREF(self);
+      return (PyObject *)self;
+    }
+#endif
+
+    GPU_texture_ref(tex);
+  }
+
   self = PyObject_New(BPyGPUTexture, &BPyGPUTexture_Type);
   self->tex = tex;
+
+#ifndef GPU_NO_USE_PY_REFERENCES
+  BLI_assert(GPU_texture_py_reference_get(tex) == NULL);
+  GPU_texture_py_reference_set(tex, (void **)&self->tex);
+#endif
 
   return (PyObject *)self;
 }

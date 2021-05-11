@@ -91,6 +91,7 @@ DeviceScene::DeviceScene(Device *device)
 
 Scene::Scene(const SceneParams &params_, Device *device)
     : name("Scene"),
+      bvh(NULL),
       default_surface(NULL),
       default_volume(NULL),
       default_light(NULL),
@@ -99,30 +100,12 @@ Scene::Scene(const SceneParams &params_, Device *device)
       device(device),
       dscene(device),
       params(params_),
-      update_stats(NULL)
+      update_stats(NULL),
+      kernels_loaded(false),
+      /* TODO(sergey): Check if it's indeed optimal value for the split kernel. */
+      max_closure_global(1)
 {
   memset((void *)&dscene.data, 0, sizeof(dscene.data));
-
-  bvh = NULL;
-  camera = create_node<Camera>();
-  dicing_camera = create_node<Camera>();
-  lookup_tables = new LookupTables();
-  film = create_node<Film>();
-  background = create_node<Background>();
-  light_manager = new LightManager();
-  geometry_manager = new GeometryManager();
-  object_manager = new ObjectManager();
-  integrator = create_node<Integrator>();
-  image_manager = new ImageManager(device->info);
-  particle_system_manager = new ParticleSystemManager();
-  bake_manager = new BakeManager();
-  procedural_manager = new ProceduralManager();
-  kernels_loaded = false;
-
-  /* TODO(sergey): Check if it's indeed optimal value for the split kernel. */
-  max_closure_global = 1;
-
-  film->add_default(this);
 
   /* OSL only works on the CPU */
   if (device->info.has_osl)
@@ -130,6 +113,23 @@ Scene::Scene(const SceneParams &params_, Device *device)
   else
     shader_manager = ShaderManager::create(SHADINGSYSTEM_SVM);
 
+  light_manager = new LightManager();
+  geometry_manager = new GeometryManager();
+  object_manager = new ObjectManager();
+  image_manager = new ImageManager(device->info);
+  particle_system_manager = new ParticleSystemManager();
+  bake_manager = new BakeManager();
+  procedural_manager = new ProceduralManager();
+
+  /* Create nodes after managers, since create_node() can tag the managers. */
+  camera = create_node<Camera>();
+  dicing_camera = create_node<Camera>();
+  lookup_tables = new LookupTables();
+  film = create_node<Film>();
+  background = create_node<Background>();
+  integrator = create_node<Integrator>();
+
+  film->add_default(this);
   shader_manager->add_default(this);
 }
 
@@ -143,21 +143,27 @@ void Scene::free_memory(bool final)
   delete bvh;
   bvh = NULL;
 
-  foreach (Shader *s, shaders)
-    delete s;
-  /* delete procedurals before other types as they may hold pointers to those types */
+  /* The order of deletion is important to make sure data is freed based on possible dependencies
+   * as the Nodes' reference counts are decremented in the destructors:
+   *
+   * - Procedurals can create and hold pointers to any other types.
+   * - Objects can hold pointers to Geometries and ParticleSystems
+   * - Lights and Geometries can hold pointers to Shaders.
+   *
+   * Similarly, we first delete all nodes and their associated device data, and then the managers
+   * and their associated device data.
+   */
   foreach (Procedural *p, procedurals)
     delete p;
-  foreach (Geometry *g, geometry)
-    delete g;
   foreach (Object *o, objects)
     delete o;
-  foreach (Light *l, lights)
-    delete l;
+  foreach (Geometry *g, geometry)
+    delete g;
   foreach (ParticleSystem *p, particle_systems)
     delete p;
+  foreach (Light *l, lights)
+    delete l;
 
-  shaders.clear();
   geometry.clear();
   objects.clear();
   lights.clear();
@@ -169,7 +175,25 @@ void Scene::free_memory(bool final)
     film->device_free(device, &dscene, this);
     background->device_free(device, &dscene);
     integrator->device_free(device, &dscene, true);
+  }
 
+  if (final) {
+    delete camera;
+    delete dicing_camera;
+    delete film;
+    delete background;
+    delete integrator;
+  }
+
+  /* Delete Shaders after every other nodes to ensure that we do not try to decrement the reference
+   * count on some dangling pointer. */
+  foreach (Shader *s, shaders)
+    delete s;
+
+  shaders.clear();
+
+  /* Now that all nodes have been deleted, we can safely delete managers and device data. */
+  if (device) {
     object_manager->device_free(device, &dscene, true);
     geometry_manager->device_free(device, &dscene, true);
     shader_manager->device_free(device, &dscene, this);
@@ -179,7 +203,7 @@ void Scene::free_memory(bool final)
 
     bake_manager->device_free(device, &dscene);
 
-    if (!params.persistent_data || final)
+    if (final)
       image_manager->device_free(device);
     else
       image_manager->device_free_builtin(device);
@@ -189,11 +213,6 @@ void Scene::free_memory(bool final)
 
   if (final) {
     delete lookup_tables;
-    delete camera;
-    delete dicing_camera;
-    delete film;
-    delete background;
-    delete integrator;
     delete object_manager;
     delete geometry_manager;
     delete shader_manager;
@@ -504,9 +523,6 @@ bool Scene::update(Progress &progress, bool &kernel_switch_needed)
 {
   /* update scene */
   if (need_update()) {
-    /* Updated used shader tag so we know which features are need for the kernel. */
-    shader_manager->update_shaders_used(this);
-
     /* Update max_closures. */
     KernelIntegrator *kintegrator = &dscene.data.integrator;
     if (params.background) {
@@ -566,9 +582,6 @@ bool Scene::load_kernels(Progress &progress, bool lock_scene)
       return false;
     }
 
-    progress.add_skip_time(timer, false);
-    VLOG(1) << "Total time spent loading kernels: " << time_dt() - timer.get_start();
-
     kernels_loaded = true;
     loaded_kernel_features = requested_features;
     return true;
@@ -587,7 +600,7 @@ int Scene::get_max_closure_count()
   int max_closures = 0;
   for (int i = 0; i < shaders.size(); i++) {
     Shader *shader = shaders[i];
-    if (shader->used) {
+    if (shader->reference_count()) {
       int num_closures = shader->graph->get_num_closures();
       max_closures = max(max_closures, num_closures);
     }
@@ -748,9 +761,10 @@ template<> void Scene::delete_node_impl(ParticleSystem *node)
   particle_system_manager->tag_update(this);
 }
 
-template<> void Scene::delete_node_impl(Shader * /*node*/)
+template<> void Scene::delete_node_impl(Shader *shader)
 {
   /* don't delete unused shaders, not supported */
+  shader->clear_reference_count();
 }
 
 template<> void Scene::delete_node_impl(Procedural *node)
@@ -817,9 +831,12 @@ template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const No
   particle_system_manager->tag_update(this);
 }
 
-template<> void Scene::delete_nodes(const set<Shader *> & /*nodes*/, const NodeOwner * /*owner*/)
+template<> void Scene::delete_nodes(const set<Shader *> &nodes, const NodeOwner * /*owner*/)
 {
   /* don't delete unused shaders, not supported */
+  for (Shader *shader : nodes) {
+    shader->clear_reference_count();
+  }
 }
 
 template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOwner *owner)

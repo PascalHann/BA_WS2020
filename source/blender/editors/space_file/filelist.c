@@ -2543,7 +2543,7 @@ int ED_path_extension_type(const char *path)
   if (BLI_path_extension_check(path, ".zip")) {
     return FILE_TYPE_ARCHIVE;
   }
-  if (BLI_path_extension_check_n(path, ".obj", ".3ds", ".fbx", ".glb", ".gltf", NULL)) {
+  if (BLI_path_extension_check_n(path, ".obj", ".3ds", ".fbx", ".glb", ".gltf", ".svg", NULL)) {
     return FILE_TYPE_OBJECT_IO;
   }
   if (BLI_path_extension_check_array(path, imb_ext_image)) {
@@ -2699,6 +2699,19 @@ uint filelist_entry_select_index_get(FileList *filelist, const int index, FileCh
   }
 
   return 0;
+}
+
+bool filelist_entry_is_selected(FileList *filelist, const int index)
+{
+  BLI_assert(index >= 0 && index < filelist->filelist.nbr_entries_filtered);
+  FileListInternEntry *intern_entry = filelist->filelist_intern.filtered[index];
+
+  /* BLI_ghash_lookup returns NULL if not found, which gets mapped to 0, which gets mapped to
+   * "not selected". */
+  const uint selection_state = POINTER_AS_UINT(
+      BLI_ghash_lookup(filelist->selection_state, intern_entry->uuid));
+
+  return selection_state != 0;
 }
 
 /**
@@ -3004,8 +3017,7 @@ static void filelist_readjob_main_recursive(Main *bmain, FileList *filelist)
       }
     }
 
-    /* XXX TODO: if databrowse F4 or append/link
-     * filelist->flags & FLF_HIDE_PARENT has to be set */
+    /* XXX TODO: if data-browse or append/link #FLF_HIDE_PARENT has to be set. */
     if (!(filelist->filter_data.flags & FLF_HIDE_PARENT)) {
       filelist->filelist.nbr_entries++;
     }
